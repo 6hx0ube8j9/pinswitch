@@ -1,4 +1,4 @@
-name: 极致高清方案
+name: SVG 自动转高清图标编译
 
 on:
   push:
@@ -17,19 +17,27 @@ jobs:
         with:
           go-version: '1.21'
 
-      - name: 编译高清资源
+      - name: 将 SVG 转换为多尺寸高清 ICO
+        # 使用内置的 magick 工具
+        # 这一行命令会生成包含 16,32,48,64,128,256 所有尺寸的 ICO
         run: |
-          # 使用官方 windres 工具，将 rc、ico、manifest 全部揉成一个资源包
-          windres -i main.rc -o main.syso -O coff
+          mkdir -p icons
+          magick -background none icons/app.svg -define icon:auto-resize=256,128,64,48,32,16 icons/app.ico
+
+      - name: 准备资源声明
+        # 强制将图标标记为 ID 1
+        run: echo '1 ICON "icons/app.ico"' > main.rc
+
+      - name: 编译资源文件
+        run: windres -i main.rc -o main.syso -O coff
 
       - name: 编译 EXE
         run: |
           go mod tidy
-          # 注意：必须直接 go build，不能加 main.go
           go build -ldflags="-s -w -H=windowsgui" -o bing-tool.exe
 
       - name: 上传成品
         uses: actions/upload-artifact@v4
         with:
-          name: BingTool_Ultimate_HD
+          name: BingTool_SVG_Standard
           path: bing-tool.exe
