@@ -1,0 +1,58 @@
+name: 自动编译 Go 工具
+
+on:
+  push:
+    branches: [ main ]  # 每次推送到 main 分支时触发
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:    # 允许你在 GitHub 页面上手动点击运行
+
+jobs:
+  build:
+    name: 编译 - ${{ matrix.go-os }} / ${{ matrix.go-arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - go-os: windows
+            go-arch: amd64
+            file-name: bing-tool-windows.exe
+          - go-os: darwin
+            go-arch: amd64
+            file-name: bing-tool-macos-intel
+          - go-os: darwin
+            go-arch: arm64
+            file-name: bing-tool-macos-m1-m2
+          - go-os: linux
+            go-arch: amd64
+            file-name: bing-tool-linux
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Go 环境
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21' # 或者你使用的版本
+
+      - name: 获取依赖
+        run: go mod tidy
+
+      - name: 执行编译
+        env:
+          GOOS: ${{ matrix.go-os }}
+          GOARCH: ${{ matrix.go-arch }}
+        run: |
+          # 如果是 Windows，添加隐藏控制台的参数
+          if [ "${{ matrix.go-os }}" = "windows" ]; then
+            go build -ldflags="-H=windowsgui" -o ${{ matrix.file-name }} main.go
+          else
+            go build -o ${{ matrix.file-name }} main.go
+          fi
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.file-name }}
+          path: ${{ matrix.file-name }}
