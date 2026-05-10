@@ -1,4 +1,4 @@
-name: 强制高清图标注入
+name: 极致高清方案
 
 on:
   push:
@@ -16,25 +16,20 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.21'
-          cache: false
 
-      - name: 准备依赖
+      - name: 编译高清资源
         run: |
-          go mod init webgo || echo "exists"
-          go get github.com/energye/systray@latest
-          go get github.com/pkg/browser@latest
-
-      - name: 编译资源文件 (关键步骤)
-        # 使用 windres 将 .rc 编译成 .syso，这是 Windows 开发的标准做法
-        # 它能确保图标被正确索引为 ID 1，支持高清缩放
-        run: windres -i main.rc -o main.syso -O coff
+          # 使用官方 windres 工具，将 rc、ico、manifest 全部揉成一个资源包
+          windres -i main.rc -o main.syso -O coff
 
       - name: 编译 EXE
-        # 不要指定 main.go，直接 build，Go 会自动拾取 main.syso
-        run: go build -ldflags="-s -w -H=windowsgui" -o bing-tool.exe
+        run: |
+          go mod tidy
+          # 注意：必须直接 go build，不能加 main.go
+          go build -ldflags="-s -w -H=windowsgui" -o bing-tool.exe
 
       - name: 上传成品
         uses: actions/upload-artifact@v4
         with:
-          name: BingTool_Standard_HD
+          name: BingTool_Ultimate_HD
           path: bing-tool.exe
