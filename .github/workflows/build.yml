@@ -1,4 +1,4 @@
-name: SVG 自动转高清图标编译
+name: SVG 高清图标自动转换编译
 
 on:
   push:
@@ -8,6 +8,9 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      # 解决 Node.js 24 的警告问题
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -16,32 +19,36 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.21'
+          # 关闭缓存功能，防止因为找不到 go.sum 报错
+          cache: false
 
       - name: 自动化图标工厂 (SVG -> 高清 ICO)
-        # 增加 -resize 保证渲染基准，-define icon:auto-resize 生成多层级
+        # 确保 icons 目录存在，并转换 SVG
         run: |
           if (!(Test-Path "icons")) { New-Item -ItemType Directory -Path "icons" }
           magick -background none -density 1024 icons/app.svg -define icon:auto-resize=256,128,64,48,32,16 icons/app.ico
 
-      - name: 生成资源定义 (强制覆盖)
-        # 使用 PowerShell 的 ASCII 编码写入，防止 windres 不识别 UTF-8
+      - name: 生成资源定义
+        # 使用简单的输出方式，确保 main.rc 的内容正确
         run: |
           "1 ICON `"icons/app.ico`"" | Out-File -FilePath main.rc -Encoding ascii
           "1 24 `"app.manifest`"" | Out-File -FilePath main.rc -Append -Encoding ascii
 
       - name: 编译资源文件
-        run: |
-          # 检查文件是否生成成功
-          ls icons/app.ico
-          windres -i main.rc -o main.syso -O coff
+        # windres 会将 main.rc 编译为 main.syso
+        run: windres -i main.rc -o main.syso -O coff
 
-      - name: 编译 EXE
+      - name: 准备 Go 模块
+        # 这一步会生成 go.sum，解决之前的依赖报错
         run: |
           go mod tidy
-          go build -ldflags="-s -w -H=windowsgui" -o bing-tool.exe
+
+      - name: 编译 EXE
+        # ldflags 去掉黑窗口，-o 指定输出名称
+        run: go build -ldflags="-s -w -H=windowsgui" -o bing-tool.exe
 
       - name: 上传成品
         uses: actions/upload-artifact@v4
         with:
-          name: BingTool_SVG_Standard
+          name: BingTool_Fixed_HD
           path: bing-tool.exe
