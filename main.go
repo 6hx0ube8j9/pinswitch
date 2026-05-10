@@ -10,7 +10,7 @@ func main() {
 }
 
 func onReady() {
-	// 依然是这个简单的红色图标数据，保证 Windows 能加载图标
+	// 红色像素图标数据
 	dummyIcon := []byte{
 		0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x10, 0x10, 0x00, 0x00, 0x01, 0x00, 0x20, 0x00, 0x68, 0x04,
 		0x00, 0x00, 0x16, 0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x20, 0x00,
@@ -21,13 +21,12 @@ func onReady() {
 	systray.SetTitle("Bing 工具")
 	systray.SetTooltip("左键点击图标或右键菜单均可打开 Bing")
 
-	// 1. 处理左键点击图标
-	// energye 库使用 SetOnCLick (注意 C 是大写) 注册回调
-	systray.SetOnClick(func() {
+	// 1. 修复：添加 menu 参数以匹配接口要求
+	systray.SetOnClick(func(menu systray.IMenu) {
 		openBing()
 	})
 
-	// 2. 创建菜单项并设置点击回调
+	// 2. 创建右键菜单项
 	mOpen := systray.AddMenuItem("打开浏览器", "访问 Bing")
 	mOpen.Click(func() {
 		openBing()
@@ -45,6 +44,4 @@ func openBing() {
 	_ = browser.OpenURL("https://www.bing.com/")
 }
 
-func onExit() {
-	// 退出时的清理
-}
+func onExit() {}
