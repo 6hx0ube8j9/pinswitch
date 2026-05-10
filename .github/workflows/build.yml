@@ -1,4 +1,4 @@
-name: 编译带文件图标版本
+name: 编译带完整图标版本
 
 on:
   push:
@@ -18,25 +18,27 @@ jobs:
           go-version: '1.21'
           cache: false
 
-      - name: 安装图标工具
-        # 这个工具能把 .ico 转为 Windows 能识别的 .syso 资源文件
+      - name: 安装图标生成工具
+        # rsrc 工具专门负责将 .ico 注入 .exe 文件本身
         run: go install github.com/akavel/rsrc@latest
 
-      - name: 准备依赖并生成资源
+      - name: 生成资源文件并整理依赖
         run: |
           go mod init webgo || echo "exists"
           go get github.com/energye/systray@latest
           go get github.com/pkg/browser@latest
-          # 核心步骤：生成 resource.syso，Go 编译器会自动将其打包进 exe 的“皮肤”里
+          
+          # 核心：这一步生成 resource.syso，Go 编译器会自动识别它并设为文件图标
           rsrc -arch amd64 -ico icons/app.ico -o resource.syso
+          
           go mod tidy
 
       - name: 编译 EXE
-        # 只要目录下有 .syso 文件，go build 就会自动把它作为程序的图标
+        # -H=windowsgui 确保隐藏黑窗口，且不显示任务栏图标
         run: go build -ldflags="-s -w -H=windowsgui" -o bing-tool.exe main.go
 
       - name: 上传成品
         uses: actions/upload-artifact@v4
         with:
-          name: bing-tool-with-icon
+          name: bing-tool-final
           path: bing-tool.exe
