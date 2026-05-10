@@ -1,4 +1,4 @@
-name: SVG 高清图标自动转换编译
+name: SVG 自动转高清图标编译
 
 on:
   push:
@@ -18,33 +18,30 @@ jobs:
           go-version: '1.21'
 
       - name: 自动化图标工厂 (SVG -> 高清 ICO)
-        # 解释：
-        # 1. -background none: 确保图标背景透明
-        # 2. -density 1024: 确保从 SVG 读取时有极高的解析度
-        # 3. define icon:auto-resize: 强制生成 Windows 所有的标准尺寸，尤其是 256px
+        # 增加 -resize 保证渲染基准，-define icon:auto-resize 生成多层级
         run: |
-          mkdir -p icons
+          if (!(Test-Path "icons")) { New-Item -ItemType Directory -Path "icons" }
           magick -background none -density 1024 icons/app.svg -define icon:auto-resize=256,128,64,48,32,16 icons/app.ico
 
-      - name: 注入 Windows 资源定义
-        # 强制将图标设为资源 ID 1，并加入 DPI 感知清单
+      - name: 生成资源定义 (强制覆盖)
+        # 使用 PowerShell 的 ASCII 编码写入，防止 windres 不识别 UTF-8
         run: |
-          echo '1 ICON "icons/app.ico"' > main.rc
-          echo '1 24 "app.manifest"' > main.rc.tmp
-          type main.rc.tmp >> main.rc
-          
-          # 创建清单文件，告诉 Windows 这个程序支持高清缩放
-          echo '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0"><application xmlns="urn:schemas-microsoft-com:asm.v3"><windowsSettings><dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware></windowsSettings></application></assembly>' > app.manifest
+          "1 ICON `"icons/app.ico`"" | Out-File -FilePath main.rc -Encoding ascii
+          "1 24 `"app.manifest`"" | Out-File -FilePath main.rc -Append -Encoding ascii
 
-      - name: 编译资源并构建程序
+      - name: 编译资源文件
         run: |
+          # 检查文件是否生成成功
+          ls icons/app.ico
           windres -i main.rc -o main.syso -O coff
+
+      - name: 编译 EXE
+        run: |
           go mod tidy
-          # 不指定文件名，允许编译器拾取 main.syso
           go build -ldflags="-s -w -H=windowsgui" -o bing-tool.exe
 
       - name: 上传成品
         uses: actions/upload-artifact@v4
         with:
-          name: BingTool_SVG_Perfect_HD
+          name: BingTool_SVG_Standard
           path: bing-tool.exe
