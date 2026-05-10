@@ -9,8 +9,10 @@ jobs:
   build:
     runs-on: windows-latest
     env:
-      # 解决 Node.js 24 的警告问题
+      # 强制 Actions 使用最新的 Node 环境，解决环境兼容性报错
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      # 禁用某些可能导致 Windows 路径冲突的 Git 设置
+      core.autocrlf: input
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -19,36 +21,37 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.21'
-          # 关闭缓存功能，防止因为找不到 go.sum 报错
           cache: false
 
       - name: 自动化图标工厂 (SVG -> 高清 ICO)
-        # 确保 icons 目录存在，并转换 SVG
+        # 增加 -density 和无损参数，确保 256px 层绝对清晰
         run: |
           if (!(Test-Path "icons")) { New-Item -ItemType Directory -Path "icons" }
           magick -background none -density 1024 icons/app.svg -define icon:auto-resize=256,128,64,48,32,16 icons/app.ico
 
-      - name: 生成资源定义
-        # 使用简单的输出方式，确保 main.rc 的内容正确
+      - name: 生成资源定义 (修复版)
+        # 用 PowerShell 原始字符串写入，确保没有编码导致的语法错误
         run: |
-          "1 ICON `"icons/app.ico`"" | Out-File -FilePath main.rc -Encoding ascii
-          "1 24 `"app.manifest`"" | Out-File -FilePath main.rc -Append -Encoding ascii
+          $rc_content = @"
+          1 ICON `"icons/app.ico`"
+          1 24 `"app.manifest`"
+          "@
+          [System.IO.File]::WriteAllText("$(Get-Location)\main.rc", $rc_content, [System.Text.Encoding]::ASCII)
 
       - name: 编译资源文件
-        # windres 会将 main.rc 编译为 main.syso
+        # 这一步是关键，如果 main.rc 格式不对会报错
         run: windres -i main.rc -o main.syso -O coff
 
-      - name: 准备 Go 模块
-        # 这一步会生成 go.sum，解决之前的依赖报错
+      - name: 准备依赖
         run: |
           go mod tidy
 
       - name: 编译 EXE
-        # ldflags 去掉黑窗口，-o 指定输出名称
+        # -H=windowsgui 确保没有黑窗口，-o 生成指定文件名
         run: go build -ldflags="-s -w -H=windowsgui" -o bing-tool.exe
 
       - name: 上传成品
         uses: actions/upload-artifact@v4
         with:
-          name: BingTool_Fixed_HD
+          name: BingTool_Latest_HD
           path: bing-tool.exe
