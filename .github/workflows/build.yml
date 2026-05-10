@@ -1,4 +1,4 @@
-name: 诊断与编译
+name: 高清图标纯净编译版
 
 on:
   push:
@@ -18,49 +18,22 @@ jobs:
           go-version: '1.21'
           cache: false
 
-      - name: 检查并转换图标
+      - name: 清理并编译资源文件
         shell: pwsh
         run: |
-          # 1. 检查 SVG 是否存在
-          if (!(Test-Path "icons/app.svg")) {
-            Write-Error "错误: 找不到 icons/app.svg，请确保文件已上传到 icons 文件夹！"
-            exit 1
-          }
-          
-          # 2. 尝试转换
-          magick -background none -density 1024 icons/app.svg -define icon:auto-resize=256,128,64,48,32,16 icons/app.ico
-          
-          # 3. 验证生成结果
-          if (!(Test-Path "icons/app.ico")) {
-            Write-Error "错误: ImageMagick 转换失败，未生成 ico 文件。"
-            exit 1
-          }
-
-      - name: 准备资源文件
-        shell: pwsh
-        run: |
-          # 检查 manifest
-          if (!(Test-Path "app.manifest")) {
-            Write-Host "警告: 找不到 app.manifest，正在生成默认清单..."
-            $manifest = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0"><application xmlns="urn:schemas-microsoft-com:asm.v3"><windowsSettings><dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware></windowsSettings></application></assembly>'
-            $manifest | Out-File -FilePath "app.manifest" -Encoding utf8
-          }
-          
-          # 生成 rc 文件 (强制 ASCII)
-          $rc = "1 ICON `"icons/app.ico`"`r`n1 24 `"app.manifest`""
-          [System.IO.File]::WriteAllText("$(Get-Location)\main.rc", $rc, [System.Text.Encoding]::ASCII)
-
-      - name: 编译资源 (Windres)
-        run: |
+          # 彻底删除旧的残留，确保图标更新
+          if (Test-Path "main.syso") { Remove-Item "main.syso" }
+          # 将 rc 文件编译为 coff 格式的 syso
           windres -i main.rc -o main.syso -O coff
 
       - name: 构建 Go 程序
         run: |
           go mod tidy
+          # -s -w 压缩体积，-H=windowsgui 隐藏控制台
           go build -ldflags="-s -w -H=windowsgui" -o bing-tool.exe
 
-      - name: 上传
+      - name: 上传成品
         uses: actions/upload-artifact@v4
         with:
-          name: BingTool_Final
+          name: BingTool_HD_Release
           path: bing-tool.exe
