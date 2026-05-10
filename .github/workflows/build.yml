@@ -1,4 +1,4 @@
-name: 编译带高清图标版本
+name: 强制高清图标编译
 
 on:
   push:
@@ -18,36 +18,26 @@ jobs:
           go-version: '1.21'
           cache: false
 
-      - name: 安装图标资源工具
-        # rsrc 依然是最稳妥的选择，关键在于如何使用它
-        run: go install github.com/akavel/rsrc@latest
+      - name: 安装高清资源工具
+        run: go install github.com/tc-hib/go-winres@latest
 
-      - name: 准备依赖并注入高清资源
+      - name: 准备依赖并处理图标
         run: |
-          # 1. 初始化模块（如果已存在会跳过）
-          go mod init webgo || echo "already initialized"
-          
-          # 2. 获取核心依赖
+          go mod init webgo || echo "exists"
           go get github.com/energye/systray@latest
           go get github.com/pkg/browser@latest
           
-          # 3. 生成资源文件
-          # 重点：rsrc 会扫描 ico 里的所有图层（16, 32, 48, 256px）并打包
-          rsrc -arch amd64 -ico icons/app.ico -o resource.syso
+          # 核心：自动根据 icons/app.ico 创建全尺寸资源包
+          go-winres make --icon icons/app.ico
           
-          # 4. 整理依赖
           go mod tidy
 
-      - name: 编译 EXE (高清模式)
-        # 核心改动：
-        # - 不要写 main.go，直接 go build 才能完美融合 resource.syso
-        # -ldflags 参数：
-        #   -s -w 压缩体积
-        #   -H=windowsgui 隐藏黑窗口
+      - name: 编译 EXE
+        # 直接 build，编译器会自动发现 go-winres 生成的 .syso 文件
         run: go build -ldflags="-s -w -H=windowsgui" -o bing-tool.exe
 
       - name: 上传成品
         uses: actions/upload-artifact@v4
         with:
-          name: BingTool_HD_Version
+          name: BingTool_Final_HD
           path: bing-tool.exe
