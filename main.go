@@ -10,8 +10,7 @@ func main() {
 }
 
 func onReady() {
-	// 创建一个简单的 16x16 红色像素图标字节流，防止 Windows 报错
-	// 这样你就不用手动上传 icon.ico 了
+	// 一个简单的 16x16 红色像素图标数据
 	dummyIcon := []byte{
 		0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x10, 0x10, 0x00, 0x00, 0x01, 0x00, 0x20, 0x00, 0x68, 0x04,
 		0x00, 0x00, 0x16, 0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x20, 0x00,
@@ -19,20 +18,26 @@ func onReady() {
 	}
 
 	systray.SetIcon(dummyIcon)
-	systray.SetTitle("Bing工具")
-	systray.SetTooltip("左键直接打开，右键弹出菜单")
+	systray.SetTitle("Bing 工具")
+	systray.SetTooltip("左键单击或右键菜单访问 Bing")
 
+	// 创建菜单项
 	mOpen := systray.AddMenuItem("打开浏览器", "访问 Bing")
 	mQuit := systray.AddMenuItem("退出", "退出程序")
 
 	go func() {
 		for {
 			select {
-			case <-systray.OnClickCh(): // 监听左键点击
+			// 1. 监听左键点击图标 (最新 API)
+			case <-systray.OnClick(): 
 				openBing()
-			case <-mOpen.ClickedCh: // 监听菜单点击
+
+			// 2. 监听菜单项点击 (最新 API)
+			case <-mOpen.Click(): 
 				openBing()
-			case <-mQuit.ClickedCh:
+
+			// 3. 监听退出菜单点击
+			case <-mQuit.Click():
 				systray.Quit()
 			}
 		}
