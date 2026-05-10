@@ -1,4 +1,4 @@
-name: 强制高清图标编译
+name: 终极高清图标方案
 
 on:
   push:
@@ -18,26 +18,31 @@ jobs:
           go-version: '1.21'
           cache: false
 
-      - name: 安装高清资源工具
-        run: go install github.com/tc-hib/go-winres@latest
+      - name: 安装图标工具
+        run: go install github.com/akavel/rsrc@latest
 
-      - name: 准备依赖并处理图标
+      - name: 强制生成高清资源
         run: |
           go mod init webgo || echo "exists"
           go get github.com/energye/systray@latest
           go get github.com/pkg/browser@latest
-          
-          # 核心：自动根据 icons/app.ico 创建全尺寸资源包
-          go-winres make --icon icons/app.ico
-          
+
+          # 1. 创建一个简单的清单文件 (manifest)，告诉 Windows 这是一个现代程序
+          echo '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0"><assemblyIdentity version="1.0.0.0" processorArchitecture="*" name="BingTool" type="win32"/><description>Bing Tool</description><trustInfo xmlns="urn:schemas-microsoft-com:asm.v3"><security><requestedPrivileges><requestedExecutionLevel level="asInvoker" uiAccess="false"/></requestedPrivileges></security></trustInfo></assembly>' > app.manifest
+
+          # 2. 使用 rsrc 同时注入图标和清单文件
+          # -ico 指向你的高清图标，-manifest 指向刚生成的清单
+          rsrc -arch amd64 -ico icons/app.ico -manifest app.manifest -o main.syso
+
           go mod tidy
 
       - name: 编译 EXE
-        # 直接 build，编译器会自动发现 go-winres 生成的 .syso 文件
+        # 注意：不要在后面写 main.go，直接运行 go build
+        # 这会让编译器自动把目录下的 main.syso 编译进二进制文件
         run: go build -ldflags="-s -w -H=windowsgui" -o bing-tool.exe
 
       - name: 上传成品
         uses: actions/upload-artifact@v4
         with:
-          name: BingTool_Final_HD
+          name: BingTool_Pro_HD
           path: bing-tool.exe
