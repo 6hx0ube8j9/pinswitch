@@ -1,4 +1,4 @@
-name: 高清图标纯净编译版
+name: 最终修复-高清图标强制打包
 
 on:
   push:
@@ -18,22 +18,34 @@ jobs:
           go-version: '1.21'
           cache: false
 
-      - name: 清理并编译资源文件
+      - name: 强制清理并手写资源脚本
         shell: pwsh
         run: |
-          # 彻底删除旧的残留，确保图标更新
-          if (Test-Path "main.syso") { Remove-Item "main.syso" }
-          # 将 rc 文件编译为 coff 格式的 syso
+          # 1. 物理检查图标是否存在
+          if (!(Test-Path "icons/app.ico")) { throw "错误：根目录 icons/ 下找不到 app.ico" }
+          
+          # 2. 检查 manifest 是否存在，不存在则生成一个（防止报错）
+          if (!(Test-Path "app.manifest")) {
+            $m = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0"><application xmlns="urn:schemas-microsoft-com:asm.v3"><windowsSettings><dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware></windowsSettings></application></assembly>'
+            [System.IO.File]::WriteAllText("$(Get-Location)\app.manifest", $m)
+          }
+
+          # 3. 手写 main.rc。使用 ASCII 编码是避开 Exit code 1 的玄学绝招
+          $rc_content = "1 ICON `"icons/app.ico`"`r`n1 24 `"app.manifest`""
+          [System.IO.File]::WriteAllText("$(Get-Location)\main.rc", $rc_content, [System.Text.Encoding]::ASCII)
+
+      - name: 编译资源文件
+        run: |
+          # 使用预装的 windres 编译。如果这里报错，说明 ICO 格式 windres 不识别
           windres -i main.rc -o main.syso -O coff
 
-      - name: 构建 Go 程序
+      - name: 编译 EXE
         run: |
           go mod tidy
-          # -s -w 压缩体积，-H=windowsgui 隐藏控制台
           go build -ldflags="-s -w -H=windowsgui" -o bing-tool.exe
 
       - name: 上传成品
         uses: actions/upload-artifact@v4
         with:
-          name: BingTool_HD_Release
+          name: BingTool_Fixed_Final
           path: bing-tool.exe
