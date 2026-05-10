@@ -1,4 +1,4 @@
-name: 编译Windows测试版
+name: 自动修复并编译Windows版
 
 on:
   push:
@@ -17,19 +17,22 @@ jobs:
         with:
           go-version: '1.21'
 
-      - name: 解决依赖
+      - name: 自动生成项目环境
         run: |
-          go mod init github.com/user/webgo || format-table  # 如果没初始化则初始化
-          go get github.com/getlantern/systray
+          # 1. 如果没有 go.mod 则初始化
+          go mod init github.com/myuser/webgo
+          # 2. 强制下载我们需要的特定库
+          go get github.com/energye/systray
           go get github.com/pkg/browser
+          # 3. 整理依赖
           go mod tidy
 
       - name: 编译 EXE
-        # 这里先去掉 -H=windowsgui，方便报错时能看到弹窗提示
-        run: go build -o bing-tool-test.exe main.go
+        # -H=windowsgui 确保没有黑窗口
+        run: go build -ldflags="-H=windowsgui" -o bing-tool.exe main.go
 
-      - name: 上传
+      - name: 上传成品
         uses: actions/upload-artifact@v4
         with:
-          name: windows-test-build
-          path: bing-tool-test.exe
+          name: windows-bing-tool
+          path: bing-tool.exe
