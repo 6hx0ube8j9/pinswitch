@@ -1,4 +1,4 @@
-name: SVG 高清图标自动转换编译
+name: 诊断与编译
 
 on:
   push:
@@ -8,11 +8,6 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    env:
-      # 强制 Actions 使用最新的 Node 环境，解决环境兼容性报错
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      # 禁用某些可能导致 Windows 路径冲突的 Git 设置
-      core.autocrlf: input
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -23,35 +18,49 @@ jobs:
           go-version: '1.21'
           cache: false
 
-      - name: 自动化图标工厂 (SVG -> 高清 ICO)
-        # 增加 -density 和无损参数，确保 256px 层绝对清晰
+      - name: 检查并转换图标
+        shell: pwsh
         run: |
-          if (!(Test-Path "icons")) { New-Item -ItemType Directory -Path "icons" }
+          # 1. 检查 SVG 是否存在
+          if (!(Test-Path "icons/app.svg")) {
+            Write-Error "错误: 找不到 icons/app.svg，请确保文件已上传到 icons 文件夹！"
+            exit 1
+          }
+          
+          # 2. 尝试转换
           magick -background none -density 1024 icons/app.svg -define icon:auto-resize=256,128,64,48,32,16 icons/app.ico
+          
+          # 3. 验证生成结果
+          if (!(Test-Path "icons/app.ico")) {
+            Write-Error "错误: ImageMagick 转换失败，未生成 ico 文件。"
+            exit 1
+          }
 
-      - name: 生成资源定义 (修复版)
-        # 用 PowerShell 原始字符串写入，确保没有编码导致的语法错误
+      - name: 准备资源文件
+        shell: pwsh
         run: |
-          $rc_content = @"
-          1 ICON `"icons/app.ico`"
-          1 24 `"app.manifest`"
-          "@
-          [System.IO.File]::WriteAllText("$(Get-Location)\main.rc", $rc_content, [System.Text.Encoding]::ASCII)
+          # 检查 manifest
+          if (!(Test-Path "app.manifest")) {
+            Write-Host "警告: 找不到 app.manifest，正在生成默认清单..."
+            $manifest = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0"><application xmlns="urn:schemas-microsoft-com:asm.v3"><windowsSettings><dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware></windowsSettings></application></assembly>'
+            $manifest | Out-File -FilePath "app.manifest" -Encoding utf8
+          }
+          
+          # 生成 rc 文件 (强制 ASCII)
+          $rc = "1 ICON `"icons/app.ico`"`r`n1 24 `"app.manifest`""
+          [System.IO.File]::WriteAllText("$(Get-Location)\main.rc", $rc, [System.Text.Encoding]::ASCII)
 
-      - name: 编译资源文件
-        # 这一步是关键，如果 main.rc 格式不对会报错
-        run: windres -i main.rc -o main.syso -O coff
+      - name: 编译资源 (Windres)
+        run: |
+          windres -i main.rc -o main.syso -O coff
 
-      - name: 准备依赖
+      - name: 构建 Go 程序
         run: |
           go mod tidy
+          go build -ldflags="-s -w -H=windowsgui" -o bing-tool.exe
 
-      - name: 编译 EXE
-        # -H=windowsgui 确保没有黑窗口，-o 生成指定文件名
-        run: go build -ldflags="-s -w -H=windowsgui" -o bing-tool.exe
-
-      - name: 上传成品
+      - name: 上传
         uses: actions/upload-artifact@v4
         with:
-          name: BingTool_Latest_HD
+          name: BingTool_Final
           path: bing-tool.exe
