@@ -1,4 +1,4 @@
-name: 注入文件图标并编译
+name: 强制注入文件图标
 
 on:
   push:
@@ -18,28 +18,28 @@ jobs:
           go-version: '1.21'
           cache: false
 
-      - name: 安装图标资源工具
-        # 这个工具能生成 Windows 识别的资源文件
-        run: go install github.com/akavel/rsrc@latest
+      - name: 安装 windres 工具
+        # 使用 Go 自带或 mingw 工具编译资源文件
+        run: |
+          go install github.com/akavel/rsrc@latest
 
-      - name: 准备依赖并注入图标
+      - name: 执行资源注入
         run: |
           go mod init webgo || echo "exists"
           go get github.com/energye/systray@latest
           go get github.com/pkg/browser@latest
           
-          # 核心步骤：生成 resource.syso 文件
-          # Go 编译器在编译时如果发现当前目录有 .syso 文件，会自动把它打包成 exe 的外壳图标
-          rsrc -arch amd64 -ico icons/app.ico -o resource.syso
+          # 使用 rsrc 直接把图标转换成编译器能识别的对象文件
+          rsrc -arch amd64 -ico icons/app.ico -o main.syso
           
           go mod tidy
 
       - name: 编译 EXE
-        # -H=windowsgui 确保隐藏黑窗口
-        run: go build -ldflags="-s -w -H=windowsgui" -o bing-tool.exe main.go
+        # 注意：这里一定不要手动指定 main.go，直接 go build 才能让编译器自动关联 .syso
+        run: go build -ldflags="-s -w -H=windowsgui" -o bing-tool.exe
 
       - name: 上传成品
         uses: actions/upload-artifact@v4
         with:
-          name: bing-tool-fixed
+          name: bing-final-version
           path: bing-tool.exe
