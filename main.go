@@ -10,7 +10,7 @@ func main() {
 }
 
 func onReady() {
-	// 一个简单的 16x16 红色像素图标数据
+	// 依然是这个简单的红色图标数据，保证 Windows 能加载图标
 	dummyIcon := []byte{
 		0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x10, 0x10, 0x00, 0x00, 0x01, 0x00, 0x20, 0x00, 0x68, 0x04,
 		0x00, 0x00, 0x16, 0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x20, 0x00,
@@ -19,33 +19,32 @@ func onReady() {
 
 	systray.SetIcon(dummyIcon)
 	systray.SetTitle("Bing 工具")
-	systray.SetTooltip("左键单击或右键菜单访问 Bing")
+	systray.SetTooltip("左键点击图标或右键菜单均可打开 Bing")
 
-	// 创建菜单项
+	// 1. 处理左键点击图标
+	// energye 库使用 SetOnCLick (注意 C 是大写) 注册回调
+	systray.SetOnClick(func() {
+		openBing()
+	})
+
+	// 2. 创建菜单项并设置点击回调
 	mOpen := systray.AddMenuItem("打开浏览器", "访问 Bing")
+	mOpen.Click(func() {
+		openBing()
+	})
+
+	systray.AddSeparator()
+
 	mQuit := systray.AddMenuItem("退出", "退出程序")
-
-	go func() {
-		for {
-			select {
-			// 1. 监听左键点击图标 (最新 API)
-			case <-systray.OnClick(): 
-				openBing()
-
-			// 2. 监听菜单项点击 (最新 API)
-			case <-mOpen.Click(): 
-				openBing()
-
-			// 3. 监听退出菜单点击
-			case <-mQuit.Click():
-				systray.Quit()
-			}
-		}
-	}()
+	mQuit.Click(func() {
+		systray.Quit()
+	})
 }
 
 func openBing() {
 	_ = browser.OpenURL("https://www.bing.com/")
 }
 
-func onExit() {}
+func onExit() {
+	// 退出时的清理
+}
