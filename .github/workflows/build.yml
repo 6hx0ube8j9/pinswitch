@@ -1,4 +1,4 @@
-name: 最终修复版编译
+name: 编译指定图标版本
 
 on:
   push:
@@ -20,14 +20,14 @@ jobs:
 
       - name: 准备依赖
         run: |
-          go mod init webgo || echo "already init"
+          go mod init webgo || echo "exists"
           go get github.com/energye/systray@latest
           go get github.com/pkg/browser@latest
           go mod tidy
 
       - name: 编译 EXE
-        # 使用 -H=windowsgui 隐藏控制台
-        run: go build -ldflags="-H=windowsgui" -o bing-tool.exe main.go
+        # -s -w 减小体积, -H=windowsgui 隐藏窗口
+        run: go build -ldflags="-s -w -H=windowsgui" -o bing-tool.exe main.go
 
       - name: 上传成品
         uses: actions/upload-artifact@v4
