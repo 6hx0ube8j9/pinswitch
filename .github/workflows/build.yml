@@ -1,4 +1,4 @@
-name: 强制注入文件图标
+name: 极简小工具自动化编译
 
 on:
   push:
@@ -12,32 +12,32 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 设置 Go 环境
+      - name: 设置 Go 环境与缓存
         uses: actions/setup-go@v5
         with:
           go-version: '1.21'
-          cache: false
+          cache: true # 开启依赖缓存，速度提升 80%
 
-      - name: 安装 windres 工具
+      - name: 自动整理依赖
         run: |
-          go install github.com/akavel/rsrc@latest
-
-      - name: 执行资源注入
-        run: |
-          go mod init webgo || echo "exists"
-          go get github.com/energye/systray@latest
-          go get github.com/pkg/browser@latest
-          
-          # 使用 rsrc 直接把图标转换成编译器能识别的对象文件
-          rsrc -arch amd64 -ico icons/app.ico -o main.syso
-          
+          # 确保依赖是最干净的状态
           go mod tidy
 
-      - name: 编译 EXE
-        run: go build -ldflags="-s -w -H=windowsgui" -o bing-tool.exe
+      - name: 编译 EXE 核心
+        run: |
+          # -s -w：移除调试信息，大幅优化体积
+          # -H=windowsgui：隐藏烦人的 CMD 黑色背景窗口
+          go build -ldflags="-s -w -H=windowsgui" -o bing-tool.exe
 
-      - name: 上传成品
+      - name: UPX 极致体积压缩
+        uses: crazy-max/ghaction-upx@v3
+        with:
+          version: latest
+          files: bing-tool.exe
+          args: -9 # 最高级别压缩
+
+      - name: 发布成品
         uses: actions/upload-artifact@v4
         with:
-          name: bing-final-version
+          name: bing-final-tool
           path: bing-tool.exe
