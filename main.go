@@ -1,5 +1,6 @@
 package main
 
+
 import (
 	"github.com/energye/systray"
 	"github.com/pkg/browser"
@@ -10,6 +11,7 @@ func main() {
 }
 
 func onReady() {
+	// 标准做法：传 nil 自动抓取 exe 本身携带的主图标
 	systray.SetIcon(nil) 
 	
 	systray.SetTitle("Bing 工具")
