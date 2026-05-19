@@ -24,7 +24,12 @@ jobs:
 
       - name: 自动整理依赖与生成图标
         run: |
-          # 🌟 使用 Go 官方标准的指令触发器，自动在云端执行图标注入
+          # 🌟 标准保护：如果云端检测不到 go.mod，自动初始化一个名为 webgo 的标准模块
+          if [ ! -f "go.mod" ]; then
+            go mod init webgo
+          fi
+
+          # 使用 Go 官方标准的指令触发器生成图标
           go generate
           
           # 整理 go 依赖
