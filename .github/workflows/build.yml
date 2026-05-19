@@ -18,13 +18,14 @@ jobs:
 
       - name: 安装 go-winres 工具
         run: |
-          go install github.com/tc-hilton/go-winres@latest
+          # 🌟 修正：正确的现代主流工具仓库路径 (tc-hib)
+          go install github.com/tc-hib/go-winres@latest
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
         shell: bash
 
       - name: 自动整理依赖与注入图标
         run: |
-          # 🌟 标准修正：直接让 go-winres 将你指定的图标打包，不需要执行繁琐的 init 会因找不到默认文件而报错。
+          # 🌟 修正：使用标准的 simply 命令直接指定图标路径
           go-winres simply --icon icons/app.ico
           
           # 整理 go 依赖
