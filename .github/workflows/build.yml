@@ -22,17 +22,18 @@ jobs:
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
         shell: bash
 
-      - name: 自动整理依赖与生成图标
+      - name: 自动整理依赖与强行注入图标
         run: |
-          # 🌟 标准保护：如果云端检测不到 go.mod，自动初始化一个名为 webgo 的标准模块
+          # 如果云端没有 go.mod，自动初始化
           if [ ! -f "go.mod" ]; then
             go mod init webgo
           fi
 
-          # 使用 Go 官方标准的指令触发器生成图标
-          go generate
+          # 🌟 标准强行注入：直接将指定图标编译为标准的 syso 资源文件
+          # 这样 Go 编译器在下一步打包时，会自动将其百分之百锁进 .exe 内部
+          go-winres simply --icon icons/app.ico
           
-          # 整理 go 依赖
+          # 整理依赖
           go mod tidy
         shell: bash
 
