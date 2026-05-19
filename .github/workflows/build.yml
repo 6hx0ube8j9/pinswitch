@@ -16,17 +16,14 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.21'
-          cache: true # 开启依赖缓存，速度提升 80%
+          cache: true  
 
       - name: 自动整理依赖
         run: |
-          # 确保依赖是最干净的状态
           go mod tidy
 
       - name: 编译 EXE 核心
         run: |
-          # -s -w：移除调试信息，大幅优化体积
-          # -H=windowsgui：隐藏烦人的 CMD 黑色背景窗口
           go build -ldflags="-s -w -H=windowsgui" -o bing-tool.exe
 
       - name: UPX 极致体积压缩
@@ -34,7 +31,7 @@ jobs:
         with:
           version: latest
           files: bing-tool.exe
-          args: -9 # 最高级别压缩
+          args: -9 
 
       - name: 发布成品
         uses: actions/upload-artifact@v4
