@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-runs-on: windows-latest
+    runs-on: windows-latest
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
