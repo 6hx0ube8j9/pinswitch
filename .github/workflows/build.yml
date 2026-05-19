@@ -18,21 +18,16 @@ jobs:
 
       - name: 安装 go-winres 工具
         run: |
-          # 安装现代的资源处理工具
           go install github.com/tc-hilton/go-winres@latest
-          # 将其路径顶进系统环境变量
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
         shell: bash
 
       - name: 自动整理依赖与注入图标
         run: |
-          # 1. 让 go-winres 自动扫描目录，它会发现你的 icons/app.ico 并自动创建配置
-          go-winres init
+          # 🌟 标准修正：直接让 go-winres 将你指定的图标打包，不需要执行繁琐的 init 会因找不到默认文件而报错。
+          go-winres simply --icon icons/app.ico
           
-          # 2. 现场编译出 main.syso 资源文件
-          go-winres make
-          
-          # 3. 整理 go 依赖
+          # 整理 go 依赖
           go mod tidy
         shell: bash
 
