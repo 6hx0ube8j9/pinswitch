@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-runs-on: windows-latest
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -16,21 +16,29 @@ jobs:
           go-version: '1.21'
           cache: true  
 
-      - name: 安装图标注入工具
+      - name: 安装 go-winres 工具
         run: |
-          go install github.com/akavel/rsrc@latest
+          # 安装现代的资源处理工具
+          go install github.com/tc-hilton/go-winres@latest
+          # 将其路径顶进系统环境变量
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
         shell: bash
 
       - name: 自动整理依赖与注入图标
         run: |
-          # 在云端实时将你的 icons/app.ico 转为 main.syso
-          rsrc -arch amd64 -ico icons/app.ico -o main.syso
+          # 1. 让 go-winres 自动扫描目录，它会发现你的 icons/app.ico 并自动创建配置
+          go-winres init
+          
+          # 2. 现场编译出 main.syso 资源文件
+          go-winres make
+          
+          # 3. 整理 go 依赖
           go mod tidy
         shell: bash
 
       - name: 编译 EXE 核心
         run: |
+          # 编译成无 CMD 窗口的程序
           go build -ldflags="-H=windowsgui" -o bing-tool.exe
 
       - name: 发布成品
