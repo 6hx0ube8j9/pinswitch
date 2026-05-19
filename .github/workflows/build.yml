@@ -1,4 +1,4 @@
-name: 最终修复-高清图标强制打包
+name: 强制注入文件图标
 
 on:
   push:
@@ -18,34 +18,26 @@ jobs:
           go-version: '1.21'
           cache: false
 
-      - name: 强制清理并手写资源脚本
-        shell: pwsh
+      - name: 安装 windres 工具
         run: |
-          # 1. 物理检查图标是否存在
-          if (!(Test-Path "icons/app.ico")) { throw "错误：根目录 icons/ 下找不到 app.ico" }
+          go install github.com/akavel/rsrc@latest
+
+      - name: 执行资源注入
+        run: |
+          go mod init webgo || echo "exists"
+          go get github.com/energye/systray@latest
+          go get github.com/pkg/browser@latest
           
-          # 2. 检查 manifest 是否存在，不存在则生成一个（防止报错）
-          if (!(Test-Path "app.manifest")) {
-            $m = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0"><application xmlns="urn:schemas-microsoft-com:asm.v3"><windowsSettings><dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware></windowsSettings></application></assembly>'
-            [System.IO.File]::WriteAllText("$(Get-Location)\app.manifest", $m)
-          }
-
-          # 3. 手写 main.rc。使用 ASCII 编码是避开 Exit code 1 的玄学绝招
-          $rc_content = "1 ICON `"icons/app.ico`"`r`n1 24 `"app.manifest`""
-          [System.IO.File]::WriteAllText("$(Get-Location)\main.rc", $rc_content, [System.Text.Encoding]::ASCII)
-
-      - name: 编译资源文件
-        run: |
-          # 使用预装的 windres 编译。如果这里报错，说明 ICO 格式 windres 不识别
-          windres -i main.rc -o main.syso -O coff
+          # 使用 rsrc 直接把图标转换成编译器能识别的对象文件
+          rsrc -arch amd64 -ico icons/app.ico -o main.syso
+          
+          go mod tidy
 
       - name: 编译 EXE
-        run: |
-          go mod tidy
-          go build -ldflags="-s -w -H=windowsgui" -o bing-tool.exe
+        run: go build -ldflags="-s -w -H=windowsgui" -o bing-tool.exe
 
       - name: 上传成品
         uses: actions/upload-artifact@v4
         with:
-          name: BingTool_Fixed_Final
+          name: bing-final-version
           path: bing-tool.exe
