@@ -6,8 +6,6 @@ import (
 	"github.com/pkg/browser"
 )
 
-// 显式指定图标路径，编译时会将其嵌入到 exe 内部
-//go:embed icons/app.ico
 var iconData []byte
 
 func main() {
