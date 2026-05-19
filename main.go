@@ -1,18 +1,21 @@
 package main
 
-
 import (
+	_ "embed" // 🌟 引入官方 embed 库
+
 	"github.com/energye/systray"
 	"github.com/pkg/browser"
 )
+
+var appIcon []byte
 
 func main() {
 	systray.Run(onReady, onExit)
 }
 
 func onReady() {
-	// 标准做法：传 nil 自动抓取 exe 本身携带的主图标
-	systray.SetIcon(nil) 
+	// 🌟 将 nil 改为 appIcon，让托盘直接从内存读取图标数据，百分之百显示
+	systray.SetIcon(appIcon) 
 	
 	systray.SetTitle("Bing 工具")
 	systray.SetTooltip("左键点击进入 Bing，右键弹出菜单")
