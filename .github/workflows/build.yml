@@ -24,22 +24,16 @@ jobs:
 
       - name: 自动整理依赖与强行注入图标
         run: |
-          # 如果云端没有 go.mod，自动初始化
           if [ ! -f "go.mod" ]; then
             go mod init webgo
           fi
-
-          # 🌟 标准强行注入：直接将指定图标编译为标准的 syso 资源文件
-          # 这样 Go 编译器在下一步打包时，会自动将其百分之百锁进 .exe 内部
+          # 提取标准 ico 里的各尺寸图层，无视任何格式兼容问题
           go-winres simply --icon icons/app.ico
-          
-          # 整理依赖
           go mod tidy
         shell: bash
 
       - name: 编译 EXE 核心
         run: |
-          # 编译成无 CMD 窗口的程序
           go build -ldflags="-H=windowsgui" -o bing-tool.exe
 
       - name: 发布成品
