@@ -1,5 +1,3 @@
-name: 极简小工具自动化编译
-
 on:
   push:
     branches: [ main ]
@@ -24,14 +22,7 @@ jobs:
 
       - name: 编译 EXE 核心
         run: |
-          go build -ldflags="-s -w -H=windowsgui" -o bing-tool.exe
-
-      - name: UPX 极致体积压缩
-        uses: crazy-max/ghaction-upx@v3
-        with:
-          version: latest
-          files: bing-tool.exe
-          args: -9 
+          go build -ldflags="-H=windowsgui" -o bing-tool.exe
 
       - name: 发布成品
         uses: actions/upload-artifact@v4
