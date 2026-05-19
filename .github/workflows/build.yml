@@ -16,9 +16,18 @@ jobs:
           go-version: '1.21'
           cache: true  
 
-      - name: 自动整理依赖
+      - name: 安装图标注入工具
         run: |
+          go install github.com/akavel/rsrc@latest
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+        shell: bash
+
+      - name: 自动整理依赖与注入图标
+        run: |
+          # 在云端实时将你的 icons/app.ico 转为 main.syso
+          rsrc -arch amd64 -ico icons/app.ico -o main.syso
           go mod tidy
+        shell: bash
 
       - name: 编译 EXE 核心
         run: |
