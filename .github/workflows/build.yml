@@ -1,43 +1,50 @@
+name: Build Launcher
+
 on:
   push:
-    branches: [ main ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: windows-latest
     steps:
-      - name: 检出代码
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: 设置 Go 环境与缓存
+      - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
-          cache: true  
+          go-version: 'stable' 
+          cache: true   
 
-      - name: 安装 go-winres 工具
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          if (!(Test-Path "go.mod")) { go mod init mihomo-launcher }
+          go get github.com/energye/systray@latest
+          go get github.com/pkg/browser@latest
+          go mod tidy
+
+      - name: Install and Run go-winres
+        shell: pwsh
         run: |
           go install github.com/tc-hib/go-winres@latest
-          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
-        shell: bash
+          $GOBIN = "$(go env GOPATH)\bin"
+          if (Test-Path "icons/app.ico") {
+            & "$GOBIN\go-winres.exe" simply --icon icons/app.ico
+          } else {
+            exit 1
+          }
 
-      - name: 自动整理依赖与强行注入图标
+      - name: Build EXE
+        shell: pwsh
         run: |
-          if [ ! -f "go.mod" ]; then
-            go mod init webgo
-          fi
-          # 提取标准 ico 里的各尺寸图层，无视任何格式兼容问题
-          go-winres simply --icon icons/app.ico
-          go mod tidy
-        shell: bash
+          $env:CGO_ENABLED="1"
+          go build -ldflags="-s -w -H=windowsgui" -o mihomo-launcher.exe .
 
-      - name: 编译 EXE 核心
-        run: |
-          go build -ldflags="-H=windowsgui" -o bing-tool.exe
-
-      - name: 发布成品
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: bing-final-tool
-          path: bing-tool.exe
+          name: mihomo-launcher
+          path: mihomo-launcher.exe
