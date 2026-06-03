@@ -5,10 +5,10 @@ package main
 import (
 	_ "embed"
 	"log"
+	"syscall"
 	"unsafe"
 
 	"github.com/energye/systray"
-	"golang.org/x/sys/windows"
 )
 
 //go:embed icons/quan.ico
@@ -20,18 +20,41 @@ var iconShuang []byte
 var (
 	mFullPinyin   *systray.MenuItem
 	mDoublePinyin *systray.MenuItem
-	user32        = windows.NewLazySystemDLL("user32.dll")
-	procGetMessage = user32.NewProc("GetMessageW")
+
+	// 动态加载 Windows 核心 DLL，彻底绕过 CGO_ENABLED=0 的编译阉割
+	user32           = syscall.NewLazyDLL("user32.dll")
+	procRegisterHotKey = user32.NewProc("RegisterHotKey")
+	procUnregisterHotKey = user32.NewProc("UnregisterHotKey")
+	procGetMessage   = user32.NewProc("GetMessageW")
+
+	advapi32          = syscall.NewLazyDLL("advapi32.dll")
+	procRegOpenKeyEx  = advapi32.NewProc("RegOpenKeyExW")
+	procRegCloseKey   = advapi32.NewProc("RegCloseKey")
+	procRegQueryValueEx = advapi32.NewProc("RegQueryValueExW")
+	procRegSetKeyValue = advapi32.NewProc("RegSetKeyValueW")
 )
+
+// 定义标准 Windows MSG 结构体
+type tagMSG struct {
+	Hwnd    syscall.Handle
+	Message uint32
+	Wparam  uintptr
+	Lparam  uintptr
+	Time    uint32
+	Pt      struct{ X, Y int32 }
+}
 
 const (
 	registryPath  = `SOFTWARE\Microsoft\InputMethod\Settings\CHS`
 	registryValue = "Enable Double Pinyin"
-	
-	HOTKEY_ID = 1
-	// 默认快捷键：Ctrl + Shift + X
-	MY_HOTKEY_MODIFIERS = 0x0002 | 0x0004 
-	MY_HOTKEY_VK        = 0x58             
+
+	HKEY_CURRENT_USER = 0x80000001
+	KEY_QUERY_VALUE   = 0x0001
+	REG_DWORD         = 4
+
+	HOTKEY_ID           = 1
+	MY_HOTKEY_MODIFIERS = 0x0002 | 0x0004 // Ctrl + Shift
+	MY_HOTKEY_VK        = 0x58             // 'X'
 )
 
 func main() {
@@ -41,10 +64,8 @@ func main() {
 
 func onReady() {
 	systray.SetTitle("输入法切换")
-	// 移除了托盘图标的悬停提示
-	systray.SetTooltip("") 
+	systray.SetTooltip("")
 
-	// 移除了“全拼模式”和“双拼模式”的鼠标悬停提示信息（第二个参数传空字符串 ""）
 	mFullPinyin = systray.AddMenuItem("全拼模式", "")
 	mDoublePinyin = systray.AddMenuItem("双拼模式", "")
 
@@ -57,7 +78,6 @@ func onReady() {
 
 	systray.AddSeparator()
 
-	// 移除了“退出程序”的鼠标悬停提示信息
 	mQuit := systray.AddMenuItem("退出程序", "")
 	mQuit.Click(func() {
 		systray.Quit()
@@ -68,12 +88,13 @@ func onReady() {
 
 	systray.SetOnClick(func(menu systray.IMenu) {
 		nowMode := getDoublePinyinRegistry()
-		toggleMode(1 - nowMode) 
+		toggleMode(1 - nowMode)
 	})
 }
 
 func onExit() {
-	windows.UnregisterHotKey(0, HOTKEY_ID)
+	// 调用原生动态链接库注销快捷键
+	procUnregisterHotKey.Call(0, HOTKEY_ID)
 }
 
 func toggleMode(targetMode uint32) {
@@ -98,13 +119,14 @@ func updateUI(mode uint32) {
 }
 
 func startHotkeyListener() {
-	err := windows.RegisterHotKey(0, HOTKEY_ID, MY_HOTKEY_MODIFIERS, MY_HOTKEY_VK)
-	if err != nil {
-		log.Println("全局快捷键注册失败:", err)
+	// 调用动态链接库注册全局快捷键
+	r1, _, _ := procRegisterHotKey.Call(0, HOTKEY_ID, MY_HOTKEY_MODIFIERS, MY_HOTKEY_VK)
+	if r1 == 0 {
+		log.Println("全局快捷键注册失败")
 		return
 	}
 
-	var msg windows.Msg
+	var msg tagMSG
 	for {
 		r1, _, _ := procGetMessage.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
 		if int32(r1) <= 0 {
@@ -119,30 +141,25 @@ func startHotkeyListener() {
 }
 
 func getDoublePinyinRegistry() uint32 {
-	var hKey windows.Handle
+	var hKey syscall.Handle
 
-	pathPtr, err := windows.UTF16PtrFromString(registryPath)
-	if err != nil {
-		return 0
-	}
-	valuePtr, err := windows.UTF16PtrFromString(registryValue)
-	if err != nil {
-		return 0
-	}
+	pathPtr, _ := syscall.UTF16PtrFromString(registryPath)
+	valuePtr, _ := syscall.UTF16PtrFromString(registryValue)
 
-	err = windows.RegOpenKeyEx(windows.HKEY_CURRENT_USER, pathPtr, 0, windows.KEY_QUERY_VALUE, &hKey)
-	if err != nil {
-		log.Println("打开注册表失败:", err)
+	// 调用原生的 RegOpenKeyExW
+	r1, _, _ := procRegOpenKeyEx.Call(HKEY_CURRENT_USER, uintptr(unsafe.Pointer(pathPtr)), 0, KEY_QUERY_VALUE, uintptr(unsafe.Pointer(&hKey)))
+	if r1 != 0 {
 		return 0
 	}
-	defer windows.RegCloseKey(hKey)
+	defer procRegCloseKey.Call(uintptr(hKey))
 
 	var value uint32
-	var size uint32 = uint32(unsafe.Sizeof(value))
+	var size uint32 = 4
 	var valType uint32
 
-	err = windows.RegQueryValueEx(hKey, valuePtr, nil, &valType, (*byte)(unsafe.Pointer(&value)), &size)
-	if err != nil {
+	// 调用原生的 RegQueryValueExW
+	r1, _, _ = procRegQueryValueEx.Call(uintptr(hKey), uintptr(unsafe.Pointer(valuePtr)), 0, uintptr(unsafe.Pointer(&valType)), uintptr(unsafe.Pointer(&value)), uintptr(unsafe.Pointer(&size)))
+	if r1 != 0 {
 		return 0
 	}
 
@@ -150,24 +167,16 @@ func getDoublePinyinRegistry() uint32 {
 }
 
 func setDoublePinyinRegistry(value uint32) {
-	pathPtr, err := windows.UTF16PtrFromString(registryPath)
-	if err != nil {
-		return
-	}
-	valuePtr, err := windows.UTF16PtrFromString(registryValue)
-	if err != nil {
-		return
-	}
+	pathPtr, _ := syscall.UTF16PtrFromString(registryPath)
+	valuePtr, _ := syscall.UTF16PtrFromString(registryValue)
 
-	err = windows.RegSetKeyValue(
-		windows.HKEY_CURRENT_USER,
-		pathPtr,
-		valuePtr,
-		windows.REG_DWORD,
-		(*byte)(unsafe.Pointer(&value)),
-		uint32(unsafe.Sizeof(value)),
+	// 调用原生的 RegSetKeyValueW 
+	procRegSetKeyValue.Call(
+		HKEY_CURRENT_USER,
+		uintptr(unsafe.Pointer(pathPtr)),
+		uintptr(unsafe.Pointer(valuePtr)),
+		REG_DWORD,
+		uintptr(unsafe.Pointer(&value)),
+		4,
 	)
-	if err != nil {
-		log.Println("修改注册表失败:", err)
-	}
 }
