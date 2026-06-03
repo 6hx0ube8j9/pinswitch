@@ -18,7 +18,7 @@ var (
 )
 
 const (
-	registryPath = `SOFTWARE\Microsoft\InputMethod\Settings\CHS`
+	registryPath  = `SOFTWARE\Microsoft\InputMethod\Settings\CHS`
 	registryValue = "Enable Double Pinyin"
 )
 
@@ -64,17 +64,13 @@ func onReady() {
 		if nowMode == 1 {
 			targetMode = 0
 		}
-		
+
 		setDoublePinyinRegistry(targetMode)
 		updateMenuState(targetMode)
 	})
 }
 
 func onExit() {}
-
----
-
-### 辅助函数：注册表操作与 UI 更新
 
 // getDoublePinyinRegistry 读取当前注册表值：0 为全拼，1 为双拼
 func getDoublePinyinRegistry() uint32 {
@@ -88,7 +84,7 @@ func getDoublePinyinRegistry() uint32 {
 	val, _, err := k.GetIntegerValue(registryValue)
 	if err != nil {
 		// 如果键值不存在，Windows 默认也是全拼
-		return 0 
+		return 0
 	}
 	return uint32(val)
 }
