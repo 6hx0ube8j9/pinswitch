@@ -1,4 +1,4 @@
-name: Build Launcher
+name: Build IME Switcher
 
 on:
   push:
@@ -21,9 +21,11 @@ jobs:
       - name: Install dependencies
         shell: pwsh
         run: |
-          if (!(Test-Path "go.mod")) { go mod init mihomo-launcher }
+          if (!(Test-Path "go.mod")) { go mod init ime-switcher }
+          # 获取托盘依赖
           go get github.com/energye/systray@latest
-          go get github.com/pkg/browser@latest
+          # 获取修改 Windows 注册表所需的官方底层依赖
+          go get golang.org/x/sys/windows/registry@latest
           go mod tidy
 
       - name: Install and Run go-winres
@@ -34,6 +36,7 @@ jobs:
           if (Test-Path "icons/app.ico") {
             & "$GOBIN\go-winres.exe" simply --icon icons/app.ico
           } else {
+            Write-Error "找不到图标文件 icons/app.ico"
             exit 1
           }
 
@@ -41,10 +44,10 @@ jobs:
         shell: pwsh
         run: |
           $env:CGO_ENABLED="1"
-          go build -ldflags="-s -w -H=windowsgui" -o mihomo-launcher.exe .
+          go build -ldflags="-s -w -H=windowsgui" -o ime-switcher.exe .
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mihomo-launcher
-          path: mihomo-launcher.exe
+          name: ime-switcher
+          path: ime-switcher.exe
