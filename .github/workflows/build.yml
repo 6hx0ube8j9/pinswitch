@@ -44,6 +44,8 @@ jobs:
         shell: pwsh
         run: |
           $env:CGO_ENABLED="1"
+          $env:GOOS="windows"
+          $env:GOARCH="amd64"
           go build -ldflags="-s -w -H=windowsgui" -o ime-switcher.exe .
 
       - name: Upload Artifact
