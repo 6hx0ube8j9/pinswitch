@@ -11,75 +11,116 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-//go:embed icons/app.ico
-var appIcon []byte
+//go:embed icons/quan.ico
+var iconQuan []byte
 
-// 定义全局变量以便在不同函数中控制菜单状态
+//go:embed icons/shuang.ico
+var iconShuang []byte
+
 var (
 	mFullPinyin   *systray.MenuItem
 	mDoublePinyin *systray.MenuItem
+	user32        = windows.NewLazySystemDLL("user32.dll")
+	procGetMessage = user32.NewProc("GetMessageW")
 )
 
 const (
 	registryPath  = `SOFTWARE\Microsoft\InputMethod\Settings\CHS`
 	registryValue = "Enable Double Pinyin"
+	
+	HOTKEY_ID = 1
+	// 默认快捷键：Ctrl + Shift + X
+	MY_HOTKEY_MODIFIERS = 0x0002 | 0x0004 
+	MY_HOTKEY_VK        = 0x58             
 )
 
 func main() {
+	go startHotkeyListener()
 	systray.Run(onReady, onExit)
 }
 
 func onReady() {
-	systray.SetIcon(appIcon)
 	systray.SetTitle("输入法切换")
-	systray.SetTooltip("左键点击切换模式，右键弹出菜单")
+	// 移除了托盘图标的悬停提示
+	systray.SetTooltip("") 
 
-	// 1. 创建右键菜单项
-	mFullPinyin = systray.AddMenuItem("全拼模式", "切换到全拼")
-	mDoublePinyin = systray.AddMenuItem("双拼模式", "切换到双拼")
+	// 移除了“全拼模式”和“双拼模式”的鼠标悬停提示信息（第二个参数传空字符串 ""）
+	mFullPinyin = systray.AddMenuItem("全拼模式", "")
+	mDoublePinyin = systray.AddMenuItem("双拼模式", "")
 
-	// 绑定右键菜单点击事件
 	mFullPinyin.Click(func() {
-		setDoublePinyinRegistry(0)
-		updateMenuState(0)
+		toggleMode(0)
 	})
 	mDoublePinyin.Click(func() {
-		setDoublePinyinRegistry(1)
-		updateMenuState(1)
+		toggleMode(1)
 	})
 
 	systray.AddSeparator()
 
-	mQuit := systray.AddMenuItem("退出程序", "关闭工具")
+	// 移除了“退出程序”的鼠标悬停提示信息
+	mQuit := systray.AddMenuItem("退出程序", "")
 	mQuit.Click(func() {
 		systray.Quit()
 	})
 
-	// 2. 初始化：启动时读取当前注册表状态并更新 UI
 	currentMode := getDoublePinyinRegistry()
-	updateMenuState(currentMode)
+	updateUI(currentMode)
 
-	// 3. 绑定左键点击事件：直接切换模式
 	systray.SetOnClick(func(menu systray.IMenu) {
-		// 读取当前状态，取反进行切换
 		nowMode := getDoublePinyinRegistry()
-		var targetMode uint32 = 1
-		if nowMode == 1 {
-			targetMode = 0
-		}
-
-		setDoublePinyinRegistry(targetMode)
-		updateMenuState(targetMode)
+		toggleMode(1 - nowMode) 
 	})
 }
 
-func onExit() {}
+func onExit() {
+	windows.UnregisterHotKey(0, HOTKEY_ID)
+}
 
-// getDoublePinyinRegistry 使用官方标准 windows 库读取注册表
+func toggleMode(targetMode uint32) {
+	setDoublePinyinRegistry(targetMode)
+	updateUI(targetMode)
+}
+
+func updateUI(mode uint32) {
+	if mode == 1 {
+		systray.SetIcon(iconShuang)
+		mDoublePinyin.Check()
+		mDoublePinyin.Disable()
+		mFullPinyin.Uncheck()
+		mFullPinyin.Enable()
+	} else {
+		systray.SetIcon(iconQuan)
+		mFullPinyin.Check()
+		mFullPinyin.Disable()
+		mDoublePinyin.Uncheck()
+		mDoublePinyin.Enable()
+	}
+}
+
+func startHotkeyListener() {
+	err := windows.RegisterHotKey(0, HOTKEY_ID, MY_HOTKEY_MODIFIERS, MY_HOTKEY_VK)
+	if err != nil {
+		log.Println("全局快捷键注册失败:", err)
+		return
+	}
+
+	var msg windows.Msg
+	for {
+		r1, _, _ := procGetMessage.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
+		if int32(r1) <= 0 {
+			break
+		}
+
+		if msg.Message == 0x0312 && msg.Wparam == HOTKEY_ID {
+			nowMode := getDoublePinyinRegistry()
+			toggleMode(1 - nowMode)
+		}
+	}
+}
+
 func getDoublePinyinRegistry() uint32 {
 	var hKey windows.Handle
 
-	// 将 Go 字符串安全转换为 Windows 的 UTF16 指针
 	pathPtr, err := windows.UTF16PtrFromString(registryPath)
 	if err != nil {
 		return 0
@@ -89,11 +130,10 @@ func getDoublePinyinRegistry() uint32 {
 		return 0
 	}
 
-	// 调用原生 Win32 API: RegOpenKeyEx
 	err = windows.RegOpenKeyEx(windows.HKEY_CURRENT_USER, pathPtr, 0, windows.KEY_QUERY_VALUE, &hKey)
 	if err != nil {
 		log.Println("打开注册表失败:", err)
-		return 0 // 默认返回全拼
+		return 0
 	}
 	defer windows.RegCloseKey(hKey)
 
@@ -101,20 +141,15 @@ func getDoublePinyinRegistry() uint32 {
 	var size uint32 = uint32(unsafe.Sizeof(value))
 	var valType uint32
 
-	// 调用原生 Win32 API: RegQueryValueEx
 	err = windows.RegQueryValueEx(hKey, valuePtr, nil, &valType, (*byte)(unsafe.Pointer(&value)), &size)
 	if err != nil {
-		// 键值不存在，Windows 默认也是全拼
 		return 0
 	}
 
 	return value
 }
 
-// setDoublePinyinRegistry 使用官方标准 windows 库修改注册表
 func setDoublePinyinRegistry(value uint32) {
-	var hKey windows.Handle
-
 	pathPtr, err := windows.UTF16PtrFromString(registryPath)
 	if err != nil {
 		return
@@ -124,36 +159,15 @@ func setDoublePinyinRegistry(value uint32) {
 		return
 	}
 
-	// 调用原生 Win32 API: RegOpenKeyEx
-	err = windows.RegOpenKeyEx(windows.HKEY_CURRENT_USER, pathPtr, 0, windows.KEY_SET_VALUE, &hKey)
-	if err != nil {
-		log.Println("打开注册表失败:", err)
-		return
-	}
-	defer windows.RegCloseKey(hKey)
-
-	var size uint32 = uint32(unsafe.Sizeof(value))
-
-	// 调用原生 Win32 API: RegSetValueEx
-	err = windows.RegSetValueEx(hKey, valuePtr, 0, windows.REG_DWORD, (*byte)(unsafe.Pointer(&value)), size)
+	err = windows.RegSetKeyValue(
+		windows.HKEY_CURRENT_USER,
+		pathPtr,
+		valuePtr,
+		windows.REG_DWORD,
+		(*byte)(unsafe.Pointer(&value)),
+		uint32(unsafe.Sizeof(value)),
+	)
 	if err != nil {
 		log.Println("修改注册表失败:", err)
-	}
-}
-
-// updateMenuState 根据模式更新菜单的勾选和置灰状态
-func updateMenuState(mode uint32) {
-	if mode == 1 {
-		mDoublePinyin.Check()
-		mDoublePinyin.Disable()
-
-		mFullPinyin.Uncheck()
-		mFullPinyin.Enable()
-	} else {
-		mFullPinyin.Check()
-		mFullPinyin.Disable()
-
-		mDoublePinyin.Uncheck()
-		mDoublePinyin.Enable()
 	}
 }
