@@ -1,1 +1,1 @@
-# webgo
+# ime-switcher
