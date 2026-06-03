@@ -5,6 +5,9 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: windows-latest
@@ -15,37 +18,37 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: 'stable' 
-          cache: true   
+          go-version: '1.22'
+          cache: true
 
       - name: Install dependencies
         shell: pwsh
         run: |
-          if (!(Test-Path "go.mod")) { go mod init ime-switcher }
-          # 获取托盘依赖
-          go get github.com/energye/systray@latest
-          # 获取修改 Windows 注册表所需的官方底层依赖
-          go get golang.org/x/sys/windows/registry@latest
           go mod tidy
 
-      - name: Install and Run go-winres
+      - name: Install and Run rsrc (Resource Compiler)
         shell: pwsh
         run: |
-          go install github.com/tc-hib/go-winres@latest
+          go install github.com/akavel/rsrc@latest
           $GOBIN = "$(go env GOPATH)\bin"
+          
+          # 自动检测你的图标在 ui/icons 还是 icons 目录下
           if (Test-Path "icons/app.ico") {
-            & "$GOBIN\go-winres.exe" simply --icon icons/app.ico
+            & "$GOBIN\rsrc.exe" -manifest main.manifest -ico ui/icons/app.ico -o rsrc.syso
+          } elseif (Test-Path "icons/app.ico") {
+            & "$GOBIN\rsrc.exe" -manifest main.manifest -ico icons/app.ico -o rsrc.syso
           } else {
-            Write-Error "找不到图标文件 icons/app.ico"
+            Write-Error "找不到图标文件 (icons/app.ico 或 icons/app.ico)"
             exit 1
           }
 
       - name: Build EXE
         shell: pwsh
         run: |
-          $env:CGO_ENABLED="1"
+          $env:CGO_ENABLED="0"
           $env:GOOS="windows"
-          $env:GOARCH="amd64"
+          $env:GOARCH="amd64"          
+          
           go build -ldflags="-s -w -H=windowsgui" -o ime-switcher.exe .
 
       - name: Upload Artifact
