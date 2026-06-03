@@ -1,12 +1,14 @@
 //go:build windows
+
 package main
 
 import (
 	_ "embed"
 	"log"
+	"unsafe"
 
 	"github.com/energye/systray"
-	"golang.org/x/sys/windows/registry"
+	"golang.org/x/sys/windows"
 )
 
 //go:embed icons/app.ico
@@ -73,33 +75,67 @@ func onReady() {
 
 func onExit() {}
 
-// getDoublePinyinRegistry 读取当前注册表值：0 为全拼，1 为双拼
+// getDoublePinyinRegistry 使用官方标准 windows 库读取注册表
 func getDoublePinyinRegistry() uint32 {
-	k, err := registry.OpenKey(registry.CurrentUser, registryPath, registry.QUERY_VALUE)
+	var hKey windows.Handle
+
+	// 将 Go 字符串安全转换为 Windows 的 UTF16 指针
+	pathPtr, err := windows.UTF16PtrFromString(registryPath)
+	if err != nil {
+		return 0
+	}
+	valuePtr, err := windows.UTF16PtrFromString(registryValue)
+	if err != nil {
+		return 0
+	}
+
+	// 调用原生 Win32 API: RegOpenKeyEx
+	err = windows.RegOpenKeyEx(windows.HKEY_CURRENT_USER, pathPtr, 0, windows.KEY_QUERY_VALUE, &hKey)
 	if err != nil {
 		log.Println("打开注册表失败:", err)
 		return 0 // 默认返回全拼
 	}
-	defer k.Close()
+	defer windows.RegCloseKey(hKey)
 
-	val, _, err := k.GetIntegerValue(registryValue)
+	var value uint32
+	var size uint32 = uint32(unsafe.Sizeof(value))
+	var valType uint32
+
+	// 调用原生 Win32 API: RegQueryValueEx
+	err = windows.RegQueryValueEx(hKey, valuePtr, nil, &valType, (*byte)(unsafe.Pointer(&value)), &size)
 	if err != nil {
-		// 如果键值不存在，Windows 默认也是全拼
+		// 键值不存在，Windows 默认也是全拼
 		return 0
 	}
-	return uint32(val)
+
+	return value
 }
 
-// setDoublePinyinRegistry 修改注册表值
+// setDoublePinyinRegistry 使用官方标准 windows 库修改注册表
 func setDoublePinyinRegistry(value uint32) {
-	k, err := registry.OpenKey(registry.CurrentUser, registryPath, registry.SET_VALUE)
+	var hKey windows.Handle
+
+	pathPtr, err := windows.UTF16PtrFromString(registryPath)
+	if err != nil {
+		return
+	}
+	valuePtr, err := windows.UTF16PtrFromString(registryValue)
+	if err != nil {
+		return
+	}
+
+	// 调用原生 Win32 API: RegOpenKeyEx
+	err = windows.RegOpenKeyEx(windows.HKEY_CURRENT_USER, pathPtr, 0, windows.KEY_SET_VALUE, &hKey)
 	if err != nil {
 		log.Println("打开注册表失败:", err)
 		return
 	}
-	defer k.Close()
+	defer windows.RegCloseKey(hKey)
 
-	err = k.SetDWordValue(registryValue, value)
+	var size uint32 = uint32(unsafe.Sizeof(value))
+
+	// 调用原生 Win32 API: RegSetValueEx
+	err = windows.RegSetValueEx(hKey, valuePtr, 0, windows.REG_DWORD, (*byte)(unsafe.Pointer(&value)), size)
 	if err != nil {
 		log.Println("修改注册表失败:", err)
 	}
@@ -108,14 +144,12 @@ func setDoublePinyinRegistry(value uint32) {
 // updateMenuState 根据模式更新菜单的勾选和置灰状态
 func updateMenuState(mode uint32) {
 	if mode == 1 {
-		// 当前是双拼：双拼打勾并禁用，全拼取消勾选并启用
 		mDoublePinyin.Check()
 		mDoublePinyin.Disable()
 
 		mFullPinyin.Uncheck()
 		mFullPinyin.Enable()
 	} else {
-		// 当前是全拼：全拼打勾并禁用，双拼取消勾选并启用
 		mFullPinyin.Check()
 		mFullPinyin.Disable()
 
