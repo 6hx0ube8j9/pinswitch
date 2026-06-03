@@ -26,19 +26,16 @@ jobs:
         run: |
           go mod tidy
 
-      - name: Install and Run rsrc (Resource Compiler)
+      - name: Install and Run go-winres (Resource Compiler)
         shell: pwsh
         run: |
-          go install github.com/akavel/rsrc@latest
+          go install github.com/tc-hib/go-winres@latest
           $GOBIN = "$(go env GOPATH)\bin"
           
-          # 自动检测你的图标在 ui/icons 还是 icons 目录下
           if (Test-Path "icons/app.ico") {
-            & "$GOBIN\rsrc.exe" -manifest main.manifest -ico ui/icons/app.ico -o rsrc.syso
-          } elseif (Test-Path "icons/app.ico") {
-            & "$GOBIN\rsrc.exe" -manifest main.manifest -ico icons/app.ico -o rsrc.syso
+            & "$GOBIN\go-winres.exe" simply --icon icons/app.ico
           } else {
-            Write-Error "找不到图标文件 (icons/app.ico 或 icons/app.ico)"
+            Write-Error "找不到图标文件 icons/app.ico"
             exit 1
           }
 
