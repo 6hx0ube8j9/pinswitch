@@ -2,7 +2,10 @@ package ui
 
 import (
 	_ "embed"
+	"runtime"
+	"syscall"
 	"time"
+	"unsafe"
 	"pinswitch/core"
 	"pinswitch/winapi"
 	"github.com/energye/systray"
@@ -19,6 +22,7 @@ type TrayUI struct {
 	mFullPinyin   *systray.MenuItem
 	mDoublePinyin *systray.MenuItem
 	mAutoStart    *systray.MenuItem
+	hHook         syscall.Handle // 保存钩子句柄以便退出时释放
 }
 
 func NewTrayUI(engine *core.SwitchEngine) *TrayUI {
@@ -44,7 +48,6 @@ func (t *TrayUI) onReady() {
 	t.mAutoStart.Click(func() { t.engine.ToggleAutoStart(); t.SyncUI() })
 	mQuit.Click(func() { systray.Quit() })
 	
-	// 左键单点击盘反转
 	systray.SetOnClick(func(menu systray.IMenu) { 
 		t.engine.SetIMEMode(1 - t.engine.GetIMEMode())
 		t.SyncUI() 
@@ -55,7 +58,10 @@ func (t *TrayUI) onReady() {
 }
 
 func (t *TrayUI) onExit() {
-	winapi.UnregisterHotKey(1)
+	// 程序退出时，务必卸载全局键盘钩子，还操作系统一片纯净
+	if t.hHook != 0 {
+		winapi.UnhookWindowsHookEx(t.hHook)
+	}
 }
 
 func (t *TrayUI) SyncUI() {
@@ -81,20 +87,62 @@ func (t *TrayUI) SyncUI() {
 	}
 }
 
+// 【终极原生方案】基于 Windows 核心低级键盘钩子，彻底无视疯狂连击
 func (t *TrayUI) StartHotkeyListener() {
-	if !winapi.RegisterHotKey(1, 0x0002|0x0004, 0x59) { // Ctrl+Shift+Y
+	// 锁定该协程到固定的操作系统线程（Windows 钩子要求必须有稳固的线程上下文）
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	var lastTrigger time.Time
+	const cooldown = 220 * time.Millisecond // 硬件级防抖时间
+
+	// 编写 Windows 键盘事件回调函数
+	keyboardProc := func(nCode int, wParam uintptr, lParam uintptr) uintptr {
+		if nCode >= 0 && wParam == winapi.WM_KEYDOWN {
+			kbd := (*winapi.KBDLLHOOKSTRUCT)(unsafe.Pointer(lParam))
+			
+			// 0x59 是 'Y' 键
+			if kbd.VkCode == 0x59 {
+				// 精准检查此时此刻 Ctrl 和 Shift 是否同时处于按下状态
+				ctrlDown := winapi.GetAsyncKeyState(winapi.VK_CONTROL) & 0x8000 != 0
+				shiftDown := winapi.GetAsyncKeyState(winapi.VK_SHIFT) & 0x8000 != 0
+				
+				if ctrlDown && shiftDown {
+					now := time.Now()
+					if now.Sub(lastTrigger) >= cooldown {
+						lastTrigger = now
+						
+						// 🌟 核心安全设计：使用 go 关键字开启新协程去处理复杂的 I/O 读写
+						// 让 Windows 的键盘回调在 1 微秒内瞬间返回，彻底杜绝任何卡死崩溃！
+						go func() {
+							currentMode := t.engine.GetIMEMode()
+							t.engine.SetIMEMode(1 - currentMode)
+							t.SyncUI()
+						}()
+					}
+				}
+			}
+		}
+		// 将消息传递给系统中的下一个钩子
+		return winapi.CallNextHookEx(t.hHook, nCode, wParam, lParam)
+	}
+
+	// 注册全局底层键盘钩子
+	t.hHook = winapi.SetWindowsHookEx(
+		winapi.WH_KEYBOARD_LL,
+		syscall.NewCallback(keyboardProc),
+		0,
+		0,
+	)
+
+	if t.hHook == 0 {
+		println("❌ [Error] 全局键盘钩子挂载失败！")
 		return
 	}
+
+	// 钩子需要一个标准的底层消息循环来维持其生命周期
 	var msg winapi.TagMSG
-	var lastTrigger time.Time
 	for winapi.GetMessage(&msg) > 0 {
-		if msg.Message == 0x0312 && msg.Wparam == 1 {
-			if time.Since(lastTrigger) < 250*time.Millisecond {
-				continue
-			}
-			lastTrigger = time.Now()
-			t.engine.SetIMEMode(1 - t.engine.GetIMEMode())
-			t.SyncUI()
-		}
+		// 这里的消息循环极度干净，不处理任何业务，只负责维持钩子存活
 	}
 }
