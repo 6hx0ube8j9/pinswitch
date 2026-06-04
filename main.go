@@ -4,8 +4,8 @@ package main
 
 import (
 	"syscall"
+	"unsafe"
 	"pinswitch/core"
-	"pinswitch/winapi"
 	"pinswitch/ui"
 )
 
@@ -17,7 +17,6 @@ var (
 func main() {
 	mutexName, _ := syscall.UTF16PtrFromString("Local\\PinswitchUniqueMutexSecure")
 	ret, _, _ := procCreateMutex.Call(0, 1, uintptr(unsafe.Pointer(mutexName)))
-	
 	if ret == 0 || syscall.GetLastError() == syscall.Errno(183) {
 		return
 	}
