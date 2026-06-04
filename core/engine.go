@@ -3,6 +3,7 @@ package core
 import (
 	"os"
 	"runtime"
+	"sync/atomic"
 	"pinswitch/winapi"
 )
 
@@ -14,7 +15,7 @@ const (
 )
 
 type SwitchEngine struct {
-	IsWriting bool
+	IsWriting int32
 }
 
 func NewSwitchEngine() *SwitchEngine {
@@ -35,10 +36,14 @@ func (e *SwitchEngine) GetIMEMode() uint32 {
 	return val
 }
 
-func (e *SwitchEngine) SetIMEMode(mode uint32) {
-	e.IsWriting = true
+func (e *SwitchEngine) SetIMEMode(mode uint32) bool {
+	if !atomic.CompareAndSwapInt32(&e.IsWriting, 0, 1) {
+		return false
+	}
+	defer atomic.StoreInt32(&e.IsWriting, 0)
+
 	winapi.RegSetKeyValueDWORD(RegPathInput, RegValInput, mode)
-	e.IsWriting = false
+	return true
 }
 
 func (e *SwitchEngine) IsAutoStart() bool {
@@ -78,7 +83,7 @@ func (e *SwitchEngine) WatchRegistry(onChanged func()) {
 		res := winapi.WaitForSingleObject(hEvent, winapi.INFINITE)
 		if res == winapi.WAIT_OBJECT_0 {
 			winapi.ResetEvent(hEvent)
-			if e.IsWriting {
+			if atomic.LoadInt32(&e.IsWriting) == 1 {
 				continue
 			}
 			onChanged()
