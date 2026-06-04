@@ -3,8 +3,9 @@ package core
 import (
 	"context"
 	"os"
-	"sync/atomic"
-	"pinswitch/winapi"
+
+	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 )
 
 const (
@@ -14,88 +15,117 @@ const (
 	RegValRun    = "PinswitchAutoStart"
 )
 
-type SwitchEngine struct {
-	IsWriting int32
-}
+type SwitchEngine struct{}
 
 func NewSwitchEngine() *SwitchEngine {
 	return &SwitchEngine{}
 }
 
 func (e *SwitchEngine) GetIMEMode() uint32 {
-	hKey, err := winapi.RegOpenKeyEx(winapi.HKEY_CURRENT_USER, RegPathInput, winapi.KEY_QUERY_VALUE)
+	k, err := registry.OpenKey(registry.CURRENT_USER, RegPathInput, registry.QUERY_VALUE)
 	if err != nil {
 		return 0
 	}
-	defer winapi.RegCloseKey(hKey)
-	
-	val, err := winapi.RegQueryValueExDWORD(hKey, RegValInput)
+	defer k.Close()
+
+	val, _, err := k.GetIntegerValue(RegValInput)
 	if err != nil {
 		return 0
 	}
-	return val
+	return uint32(val)
 }
 
 func (e *SwitchEngine) SetIMEMode(mode uint32) bool {
 	if e.GetIMEMode() == mode {
 		return false
 	}
-	if !atomic.CompareAndSwapInt32(&e.IsWriting, 0, 1) {
-		return false
-	}
-	defer atomic.StoreInt32(&e.IsWriting, 0)
-
-	winapi.RegSetKeyValueDWORD(RegPathInput, RegValInput, mode)
-	return true
-}
-
-func (e *SwitchEngine) IsAutoStart() bool {
-	hKey, err := winapi.RegOpenKeyEx(winapi.HKEY_CURRENT_USER, RegPathRun, winapi.KEY_QUERY_VALUE)
+	
+	k, err := registry.OpenKey(registry.CURRENT_USER, RegPathInput, registry.SET_VALUE)
 	if err != nil {
 		return false
 	}
-	defer winapi.RegCloseKey(hKey)
-	return winapi.RegQueryValueExSZ(hKey, RegValRun)
+	defer k.Close()
+
+	err = k.SetDWordValue(RegValInput, mode)
+	return err == nil
+}
+
+func (e *SwitchEngine) IsAutoStart() bool {
+	k, err := registry.OpenKey(registry.CURRENT_USER, RegPathRun, registry.QUERY_VALUE)
+	if err != nil {
+		return false
+	}
+	defer k.Close()
+
+	_, _, err = k.GetStringValue(RegValRun)
+	return err == nil
 }
 
 func (e *SwitchEngine) ToggleAutoStart() {
+	k, err := registry.OpenKey(registry.CURRENT_USER, RegPathRun, registry.SET_VALUE)
+	if err != nil {
+		return
+	}
+	defer k.Close()
+
 	if e.IsAutoStart() {
-		winapi.RegDeleteKeyValue(RegPathRun, RegValRun)
+		k.DeleteValue(RegValRun)
 	} else {
 		exePath, err := os.Executable()
 		if err == nil {
-			winapi.RegSetKeyValueSZ(RegPathRun, RegValRun, exePath)
+			k.SetStringValue(RegValRun, exePath)
 		}
 	}
 }
 
 func (e *SwitchEngine) WatchRegistry(ctx context.Context, onChanged func()) {
-	hKey, err := winapi.RegOpenKeyEx(winapi.HKEY_CURRENT_USER, RegPathInput, winapi.KEY_NOTIFY|winapi.KEY_QUERY_VALUE)
+	k, err := registry.OpenKey(registry.CURRENT_USER, RegPathInput, registry.NOTIFY)
 	if err != nil {
 		return
 	}
-	defer winapi.RegCloseKey(hKey)
+	defer k.Close()
 
-	hEvent := winapi.CreateEvent()
-	if hEvent == 0 {
+	regEvent, err := windows.CreateEvent(nil, 0, 0, nil)
+	if err != nil {
 		return
 	}
-	defer winapi.CloseHandle(hEvent)
+	defer windows.CloseHandle(regEvent)
+
+	quitEvent, err := windows.CreateEvent(nil, 0, 0, nil)
+	if err != nil {
+		return
+	}
+	defer windows.CloseHandle(quitEvent)
+
+	go func() {
+		<-ctx.Done()
+		windows.SetEvent(quitEvent)
+	}()
+
+	events := []windows.Handle{regEvent, quitEvent}
 
 	for {
-		select {
-		case <-ctx.Done():
+		err = windows.RegNotifyChangeKeyValue(
+			windows.Handle(k),
+			false,
+			windows.REG_NOTIFY_CHANGE_LAST_SET,
+			regEvent,
+			true,
+		)
+		if err != nil {
 			return
-		default:
-			winapi.RegNotifyChangeKeyValue(hKey, hEvent)
-			res := winapi.WaitForSingleObject(hEvent, 100)
-			if res == winapi.WAIT_OBJECT_0 {
-				winapi.ResetEvent(hEvent)
-				if atomic.LoadInt32(&e.IsWriting) == 1 {
-					continue
-				}
-				onChanged()
-			}
+		}
+
+		s, err := windows.WaitForMultipleObjects(events, false, windows.INFINITE)
+		if err != nil {
+			return
+		}
+
+		switch s {
+		case windows.WAIT_OBJECT_0:
+			onChanged()
+		case windows.WAIT_OBJECT_0 + 1:
+			return
 		}
 	}
 }
