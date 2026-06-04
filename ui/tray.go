@@ -3,7 +3,6 @@ package ui
 import (
 	_ "embed"
 	"runtime"
-	"time"
 	"pinswitch/core"
 	"pinswitch/winapi"
 	"github.com/energye/systray"
@@ -20,6 +19,7 @@ type TrayUI struct {
 	mFullPinyin   *systray.MenuItem
 	mDoublePinyin *systray.MenuItem
 	mAutoStart    *systray.MenuItem
+	hwnd          uintptr
 }
 
 func NewTrayUI(engine *core.SwitchEngine) *TrayUI {
@@ -46,17 +46,21 @@ func (t *TrayUI) onReady() {
 	mQuit.Click(func() { systray.Quit() })
 	
 	systray.SetOnClick(func(menu systray.IMenu) { 
-		if t.engine.SetIMEMode(1 - t.engine.GetIMEMode()) {
+		current := t.engine.GetIMEMode()
+		if t.engine.SetIMEMode(1 - current) {
 			t.SyncUI()
 		}
 	})
 
 	t.SyncUI()
 	go t.engine.WatchRegistry(t.SyncUI)
+	go t.StartHotkeyListener()
 }
 
 func (t *TrayUI) onExit() {
-	winapi.UnregisterHotKey(1)
+	if t.hwnd != 0 {
+		winapi.DestroyWindow(t.hwnd)
+	}
 }
 
 func (t *TrayUI) SyncUI() {
@@ -86,8 +90,31 @@ func (t *TrayUI) StartHotkeyListener() {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	if !winapi.RegisterHotKey(1, 0x0002|0x0004, 0x59) {
-		println("❌ [Error] Ctrl+Shift+Y 热键注册失败，可能被占用！")
+	className := "PinswitchHotkeyWindow"
+	winapi.RegisterClass(className, func(hwnd uintptr, msg uint32, wparam uintptr, lparam uintptr) uintptr {
+		switch msg {
+		case 0x0312:
+			if wparam == 1 {
+				current := t.engine.GetIMEMode()
+				if t.engine.SetIMEMode(1 - current) {
+					t.SyncUI()
+				}
+			}
+			return 0
+		case 0x0002:
+			winapi.UnregisterHotKey(hwnd, 1)
+			winapi.PostQuitMessage(0)
+			return 0
+		}
+		return winapi.DefWindowProc(hwnd, msg, wparam, lparam)
+	})
+
+	t.hwnd = winapi.CreateWindowEx(className)
+	if t.hwnd == 0 {
+		return
+	}
+
+	if !winapi.RegisterHotKey(t.hwnd, 1, 0x0002|0x0004, 0x59) {
 		return
 	}
 
@@ -97,13 +124,7 @@ func (t *TrayUI) StartHotkeyListener() {
 		if res <= 0 {
 			break
 		}
-
-		if msg.Message == 0x0312 && msg.Wparam == 1 {
-			currentMode := t.engine.GetIMEMode()
-			if t.engine.SetIMEMode(1 - currentMode) {
-				t.SyncUI()
-			}
-		}
-		time.Sleep(1 * time.Millisecond)
+		winapi.TranslateMessage(&msg)
+		winapi.DispatchMessage(&msg)
 	}
 }
