@@ -2,10 +2,7 @@ package ui
 
 import (
 	_ "embed"
-	"runtime"
-	"syscall"
 	"time"
-	"unsafe"
 	"pinswitch/core"
 	"pinswitch/winapi"
 	"github.com/energye/systray"
@@ -22,7 +19,6 @@ type TrayUI struct {
 	mFullPinyin   *systray.MenuItem
 	mDoublePinyin *systray.MenuItem
 	mAutoStart    *systray.MenuItem
-	hHook         syscall.Handle
 }
 
 func NewTrayUI(engine *core.SwitchEngine) *TrayUI {
@@ -58,9 +54,7 @@ func (t *TrayUI) onReady() {
 }
 
 func (t *TrayUI) onExit() {
-	if t.hHook != 0 {
-		winapi.UnhookWindowsHookEx(t.hHook)
-	}
+	winapi.UnregisterHotKey(1)
 }
 
 func (t *TrayUI) SyncUI() {
@@ -87,50 +81,32 @@ func (t *TrayUI) SyncUI() {
 }
 
 func (t *TrayUI) StartHotkeyListener() {
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-
-	var lastTrigger time.Time
-	const cooldown = 220 * time.Millisecond
-
-	keyboardProc := func(nCode int, wParam uintptr, lParam uintptr) uintptr {
-		if nCode >= 0 && wParam == winapi.WM_KEYDOWN {
-			kbd := (*winapi.KBDLLHOOKSTRUCT)(unsafe.Pointer(lParam))
-			
-			if kbd.VkCode == 0x59 {
-				ctrlDown := winapi.GetAsyncKeyState(winapi.VK_CONTROL) < 0
-				shiftDown := winapi.GetAsyncKeyState(winapi.VK_SHIFT) < 0
-				
-				if ctrlDown && shiftDown {
-					now := time.Now()
-					if now.Sub(lastTrigger) >= cooldown {
-						lastTrigger = now
-						
-						go func() {
-							currentMode := t.engine.GetIMEMode()
-							t.engine.SetIMEMode(1 - currentMode)
-							t.SyncUI()
-						}()
-					}
-				}
-			}
-		}
-		return winapi.CallNextHookEx(t.hHook, nCode, wParam, lParam)
-	}
-
-	t.hHook = winapi.SetWindowsHookEx(
-		winapi.WH_KEYBOARD_LL,
-		syscall.NewCallback(keyboardProc),
-		0,
-		0,
-	)
-
-	if t.hHook == 0 {
-		println("❌ [Error] 全局键盘钩子挂载失败！")
+	if !winapi.RegisterHotKey(1, 0x0002|0x0004, 0x59) {
+		println("❌ [Error] Ctrl+Shift+Y 热键注册失败，可能被占用！")
 		return
 	}
 
 	var msg winapi.TagMSG
-	for winapi.GetMessage(&msg) > 0 {
+	var lastTrigger time.Time
+	const cooldown = 220 * time.Millisecond
+
+	for {
+		res := winapi.GetMessage(&msg)
+		if res <= 0 {
+			break
+		}
+
+		if msg.Message == 0x0312 && msg.Wparam == 1 {
+			now := time.Now()
+			if now.Sub(lastTrigger) < cooldown {
+				continue
+			}
+			lastTrigger = now
+
+			currentMode := t.engine.GetIMEMode()
+			t.engine.SetIMEMode(1 - currentMode)
+			t.SyncUI()
+		}
+		time.Sleep(1 * time.Millisecond)
 	}
 }
