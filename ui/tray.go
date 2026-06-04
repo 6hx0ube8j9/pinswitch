@@ -46,8 +46,9 @@ func (t *TrayUI) onReady() {
 	mQuit.Click(func() { systray.Quit() })
 	
 	systray.SetOnClick(func(menu systray.IMenu) { 
-		t.engine.SetIMEMode(1 - t.engine.GetIMEMode())
-		t.SyncUI() 
+		if t.engine.SetIMEMode(1 - t.engine.GetIMEMode()) {
+			t.SyncUI()
+		}
 	})
 
 	t.SyncUI()
@@ -91,9 +92,6 @@ func (t *TrayUI) StartHotkeyListener() {
 	}
 
 	var msg winapi.TagMSG
-	var lastTrigger time.Time
-	const cooldown = 220 * time.Millisecond
-
 	for {
 		res := winapi.GetMessage(&msg)
 		if res <= 0 {
@@ -101,15 +99,10 @@ func (t *TrayUI) StartHotkeyListener() {
 		}
 
 		if msg.Message == 0x0312 && msg.Wparam == 1 {
-			now := time.Now()
-			if now.Sub(lastTrigger) < cooldown {
-				continue
-			}
-			lastTrigger = now
-
 			currentMode := t.engine.GetIMEMode()
-			t.engine.SetIMEMode(1 - currentMode)
-			t.SyncUI()
+			if t.engine.SetIMEMode(1 - currentMode) {
+				t.SyncUI()
+			}
 		}
 		time.Sleep(1 * time.Millisecond)
 	}
