@@ -15,7 +15,9 @@ var (
 	procTranslateMessage = user32.NewProc("TranslateMessage")
 	procDispatchMessage  = user32.NewProc("DispatchMessageW")
 	procDefWindowProc    = user32.NewProc("DefWindowProcW")
-	procRegisterClass    = user32.NewProc("RegisterClassW")
+	
+	procRegisterClassEx  = user32.NewProc("RegisterClassExW") 
+	
 	procCreateWindowEx   = user32.NewProc("CreateWindowExW")
 	procDestroyWindow    = user32.NewProc("DestroyWindow")
 	procPostQuitMessage  = user32.NewProc("PostQuitMessage")
@@ -103,7 +105,7 @@ func RegisterClass(className string, wndProc func(hwnd uintptr, msg uint32, wpar
 		LpfnWndProc:   syscall.NewCallback(wndProc),
 		LpszClassName: classNamePtr,
 	}
-	procRegisterClass.Call(uintptr(unsafe.Pointer(&wc)))
+	procRegisterClassEx.Call(uintptr(unsafe.Pointer(&wc)))
 }
 
 func CreateWindowEx(dwExStyle uint32, lpClassName, lpWindowName string, dwStyle uint32, x, y, nWidth, nHeight int32, hWndParent, hMenu, hInstance, lpParam uintptr) uintptr {
