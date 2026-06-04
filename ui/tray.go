@@ -71,37 +71,39 @@ func (t *TrayUI) onReady() {
 	t.mAutoStart = systray.AddMenuItem("开机启动", "")
 	mQuit := systray.AddMenuItem("退出程序", "")
 
-	t.SyncUI()
+	t.SyncUI() 
 
 	go t.StartHotkeyListener()
 	go t.engine.WatchRegistry(t.ctx, func() {
 		t.SyncUI()
 	})
 
-	go func() {
-		for {
-			select {
-			case <-t.mFullPinyin.ClickedCh:
-				t.engine.SetIMEMode(0)
-				t.SyncUI()
-			case <-t.mDoublePinyin.ClickedCh:
-				t.engine.SetIMEMode(1)
-				t.SyncUI()
-			case <-t.mAutoStart.ClickedCh:
-				t.engine.ToggleAutoStart()
-				t.SyncUI()
-			case <-mQuit.ClickedCh:
-				systray.Quit()
-				return
-			case <-t.ctx.Done():
-				return
-			}
-		}
-	}()
+	t.mFullPinyin.Click(func() {
+		t.engine.SetIMEMode(0)
+		t.SyncUI()
+	})
+	
+	t.mDoublePinyin.Click(func() {
+		t.engine.SetIMEMode(1)
+		t.SyncUI()
+	})
+	
+	t.mAutoStart.Click(func() {
+		t.engine.ToggleAutoStart()
+		t.SyncUI()
+	})
+	
+	mQuit.Click(func() {
+		systray.Quit()
+	})
+
+	systray.SetOnClick(func() {
+		t.toggleMode()
+	})
 }
 
 func (t *TrayUI) onExit() {
-	t.cancel()
+	t.cancel() 
 
 	if t.hwnd != 0 {
 		winapi.PostMessage(t.hwnd, 0x0010, 0, 0)
@@ -119,12 +121,13 @@ func (t *TrayUI) toggleMode() {
 
 	current := t.engine.GetIMEMode()
 	if t.engine.SetIMEMode(1 - current) {
-		t.SyncUI()
+		t.SyncUI() 
 	}
 }
 
 func (t *TrayUI) SyncUI() {
 	mode := t.engine.GetIMEMode()
+	
 	if mode == t.currentMode {
 		return
 	}
@@ -158,15 +161,15 @@ func (t *TrayUI) StartHotkeyListener() {
 	className := "PinswitchHotkeyWindow_Unique_Class"
 	winapi.RegisterClass(className, func(hwnd uintptr, msg uint32, wparam uintptr, lparam uintptr) uintptr {
 		switch msg {
-		case 0x0312:
+		case 0x0312: 
 			if wparam == 1 {
 				t.toggleMode()
 			}
 			return 0
-		case 0x0400 + 777:
+		case 0x0400 + 777: 
 			t.toggleMode()
 			return 0
-		case 0x0010:
+		case 0x0010: 
 			winapi.UnregisterHotKey(hwnd, 1)
 			winapi.DestroyWindow(hwnd)
 			winapi.PostQuitMessage(0)
@@ -181,7 +184,7 @@ func (t *TrayUI) StartHotkeyListener() {
 	}
 	t.hwnd = hwnd
 
-	winapi.RegisterHotKey(hwnd, 1, 0x0002|0x0004, 0x59)
+	winapi.RegisterHotKey(hwnd, 1, 0x0002|0x0004, 0x59) 
 
 	var msg winapi.Msg
 	for {
