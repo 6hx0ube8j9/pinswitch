@@ -9,10 +9,12 @@ import (
 )
 
 const (
-	RegPathInput = `SOFTWARE\Microsoft\InputMethod\Settings\CHS`
-	RegValInput  = "Enable Double Pinyin"
-	RegPathRun   = `Software\Microsoft\Windows\CurrentVersion\Run`
-	RegValRun    = "PinswitchAutoStart"
+	RegPathInput   = `SOFTWARE\Microsoft\InputMethod\Settings\CHS`
+	RegValInput    = "Enable Double Pinyin"
+	RegPathRun     = `Software\Microsoft\Windows\CurrentVersion\Run`
+	RegValRun      = "PinswitchAutoStart"
+	RegPathApp     = `Software\Pinswitch`
+	RegValHideTray = "HideTrayIcon"
 )
 
 type SwitchEngine struct{}
@@ -39,7 +41,7 @@ func (e *SwitchEngine) SetIMEMode(mode uint32) bool {
 	if e.GetIMEMode() == mode {
 		return false
 	}
-	
+
 	k, err := registry.OpenKey(registry.CURRENT_USER, RegPathInput, registry.SET_VALUE)
 	if err != nil {
 		return false
@@ -79,6 +81,31 @@ func (e *SwitchEngine) ToggleAutoStart() {
 	}
 }
 
+func (e *SwitchEngine) IsTrayHidden() bool {
+	k, err := registry.OpenKey(registry.CURRENT_USER, RegPathApp, registry.QUERY_VALUE)
+	if err != nil {
+		return false
+	}
+	defer k.Close()
+
+	val, _, err := k.GetIntegerValue(RegValHideTray)
+	return err == nil && val == 1
+}
+
+func (e *SwitchEngine) SetTrayHidden(hide bool) {
+	k, _, err := registry.CreateKey(registry.CURRENT_USER, RegPathApp, registry.ALL_ACCESS)
+	if err != nil {
+		return
+	}
+	defer k.Close()
+
+	if hide {
+		k.SetDWordValue(RegValHideTray, 1)
+	} else {
+		k.SetDWordValue(RegValHideTray, 0)
+	}
+}
+
 func (e *SwitchEngine) WatchRegistry(ctx context.Context, onChanged func()) {
 	k, err := registry.OpenKey(registry.CURRENT_USER, RegPathInput, registry.NOTIFY)
 	if err != nil {
@@ -106,13 +133,7 @@ func (e *SwitchEngine) WatchRegistry(ctx context.Context, onChanged func()) {
 	events := []windows.Handle{regEvent, quitEvent}
 
 	for {
-		err = windows.RegNotifyChangeKeyValue(
-			windows.Handle(k),
-			false,
-			windows.REG_NOTIFY_CHANGE_LAST_SET,
-			regEvent,
-			true,
-		)
+		err = windows.RegNotifyChangeKeyValue(windows.Handle(k), false, windows.REG_NOTIFY_CHANGE_LAST_SET, regEvent, true)
 		if err != nil {
 			return
 		}
