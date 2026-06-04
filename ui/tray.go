@@ -2,6 +2,7 @@ package ui
 
 import (
 	_ "embed"
+	"runtime"
 	"time"
 	"pinswitch/core"
 	"pinswitch/winapi"
@@ -81,6 +82,9 @@ func (t *TrayUI) SyncUI() {
 }
 
 func (t *TrayUI) StartHotkeyListener() {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	if !winapi.RegisterHotKey(1, 0x0002|0x0004, 0x59) {
 		println("❌ [Error] Ctrl+Shift+Y 热键注册失败，可能被占用！")
 		return
