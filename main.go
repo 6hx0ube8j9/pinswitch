@@ -15,7 +15,7 @@ import (
 func main() {
 	isRestart := len(os.Args) > 1 && os.Args[1] == "-restart"
 	if isRestart {
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 	}
 
 	ret, err := winapi.CreateMutex("Local\\PinswitchUniqueMutexSecure")
