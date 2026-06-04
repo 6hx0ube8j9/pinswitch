@@ -11,6 +11,13 @@ var (
 	procRegisterHotKey           = user32.NewProc("RegisterHotKey")
 	procUnregisterHotKey         = user32.NewProc("UnregisterHotKey")
 	procGetMessage               = user32.NewProc("GetMessageW")
+	procTranslateMessage         = user32.NewProc("TranslateMessage")
+	procDispatchMessage          = user32.NewProc("DispatchMessageW")
+	procDefWindowProc            = user32.NewProc("DefWindowProcW")
+	procRegisterClass            = user32.NewProc("RegisterClassW")
+	procCreateWindowEx           = user32.NewProc("CreateWindowExW")
+	procDestroyWindow            = user32.NewProc("DestroyWindow")
+	procPostQuitMessage          = user32.NewProc("PostQuitMessage")
 	
 	advapi32                     = syscall.NewLazyDLL("advapi32.dll")
 	procRegOpenKeyEx             = advapi32.NewProc("RegOpenKeyExW")
@@ -44,15 +51,29 @@ const (
 	INFINITE                   = 0xFFFFFFFF
 	TH32CS_SNAPPROCESS         = 0x00000002
 	PROCESS_TERMINATE          = 0x0001
+	HWND_MESSAGE               = ^uintptr(2)
 )
 
 type TagMSG struct {
-	Hwnd    uint32
+	Hwnd    uintptr
 	Message uint32
 	Wparam  uintptr
 	Lparam  uintptr
 	Time    uint32
 	Pt      struct{ X, Y int32 }
+}
+
+type TagWNDCLASS struct {
+	Style         uint32
+	LpfnWndProc   uintptr
+	CbClsExtra    int32
+	CbWndExtra    int32
+	HInstance     uintptr
+	HIcon         uintptr
+	HCursor       uintptr
+	HbrBackground uintptr
+	LpszMenuName  *uint16
+	LpszClassName *uint16
 }
 
 type TagPROCESSENTRY32W struct {
@@ -68,18 +89,57 @@ type TagPROCESSENTRY32W struct {
 	ExeFile         [260]uint16
 }
 
-func RegisterHotKey(id int, modifiers, vk uint32) bool {
-	r1, _, _ := procRegisterHotKey.Call(0, uintptr(id), uintptr(modifiers), uintptr(vk))
+func RegisterClass(className string, wndProc func(hwnd uintptr, msg uint32, wparam uintptr, lparam uintptr) uintptr) {
+	namePtr, _ := syscall.UTF16PtrFromString(className)
+	hInstance, _, _ := procCloseHandle.Call(0)
+	wc := TagWNDCLASS{
+		LpfnWndProc:   syscall.NewCallback(wndProc),
+		HInstance:     hInstance,
+		LpszClassName: namePtr,
+	}
+	procRegisterClass.Call(uintptr(unsafe.Pointer(&wc)))
+}
+
+func CreateWindowEx(className string) uintptr {
+	namePtr, _ := syscall.UTF16PtrFromString(className)
+	hInstance, _, _ := procCloseHandle.Call(0)
+	hwnd, _, _ := procCreateWindowEx.Call(0, uintptr(unsafe.Pointer(namePtr)), uintptr(unsafe.Pointer(namePtr)), 0, 0, 0, 0, 0, HWND_MESSAGE, 0, hInstance, 0)
+	return hwnd
+}
+
+func DestroyWindow(hwnd uintptr) {
+	procDestroyWindow.Call(hwnd)
+}
+
+func PostQuitMessage(exitCode int32) {
+	procPostQuitMessage.Call(uintptr(exitCode))
+}
+
+func DefWindowProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
+	r1, _, _ := procDefWindowProc.Call(hwnd, uintptr(msg), wparam, lparam)
+	return r1
+}
+
+func RegisterHotKey(hwnd uintptr, id int, modifiers, vk uint32) bool {
+	r1, _, _ := procRegisterHotKey.Call(hwnd, uintptr(id), uintptr(modifiers), uintptr(vk))
 	return r1 != 0
 }
 
-func UnregisterHotKey(id int) {
-	procUnregisterHotKey.Call(0, uintptr(id))
+func UnregisterHotKey(hwnd uintptr, id int) {
+	procUnregisterHotKey.Call(hwnd, uintptr(id))
 }
 
 func GetMessage(msg *TagMSG) int32 {
 	r1, _, _ := procGetMessage.Call(uintptr(unsafe.Pointer(msg)), 0, 0, 0)
 	return int32(r1)
+}
+
+func TranslateMessage(msg *TagMSG) {
+	procTranslateMessage.Call(uintptr(unsafe.Pointer(msg)))
+}
+
+func DispatchMessage(msg *TagMSG) {
+	procDispatchMessage.Call(uintptr(unsafe.Pointer(msg)))
 }
 
 func CreateEvent() syscall.Handle {
