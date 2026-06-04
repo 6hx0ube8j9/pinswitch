@@ -97,7 +97,7 @@ func (t *TrayUI) onReady() {
 		systray.Quit()
 	})
 
-	systray.SetOnClick(func() {
+	systray.SetOnClick(func(menu systray.IMenu) {
 		t.toggleMode()
 	})
 }
