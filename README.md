@@ -1,1 +1,1 @@
-# ime-switcher
+# pinswitch
