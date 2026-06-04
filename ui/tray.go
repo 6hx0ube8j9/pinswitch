@@ -2,6 +2,7 @@ package ui
 
 import (
 	_ "embed"
+	"context"
 	"runtime"
 	"pinswitch/core"
 	"pinswitch/winapi"
@@ -20,10 +21,13 @@ type TrayUI struct {
 	mDoublePinyin *systray.MenuItem
 	mAutoStart    *systray.MenuItem
 	hwnd          uintptr
+	ctx           context.Context
+	cancel        context.CancelFunc
 }
 
 func NewTrayUI(engine *core.SwitchEngine) *TrayUI {
-	return &TrayUI{engine: engine}
+	ctx, cancel := context.WithCancel(context.Background())
+	return &TrayUI{engine: engine, ctx: ctx, cancel: cancel}
 }
 
 func (t *TrayUI) Start() {
@@ -44,8 +48,8 @@ func (t *TrayUI) onReady() {
 	t.mDoublePinyin.Click(func() { t.engine.SetIMEMode(1); t.SyncUI() })
 	t.mAutoStart.Click(func() { t.engine.ToggleAutoStart(); t.SyncUI() })
 	mQuit.Click(func() { systray.Quit() })
-	
-	systray.SetOnClick(func(menu systray.IMenu) { 
+
+	systray.SetOnClick(func(menu systray.IMenu) {
 		current := t.engine.GetIMEMode()
 		if t.engine.SetIMEMode(1 - current) {
 			t.SyncUI()
@@ -53,11 +57,12 @@ func (t *TrayUI) onReady() {
 	})
 
 	t.SyncUI()
-	go t.engine.WatchRegistry(t.SyncUI)
+	go t.engine.WatchRegistry(t.ctx, t.SyncUI)
 	go t.StartHotkeyListener()
 }
 
 func (t *TrayUI) onExit() {
+	t.cancel()
 	if t.hwnd != 0 {
 		winapi.DestroyWindow(t.hwnd)
 	}
@@ -93,7 +98,7 @@ func (t *TrayUI) StartHotkeyListener() {
 	className := "PinswitchHotkeyWindow"
 	winapi.RegisterClass(className, func(hwnd uintptr, msg uint32, wparam uintptr, lparam uintptr) uintptr {
 		switch msg {
-		case 0x0312:
+		case 0x0312: // WM_HOTKEY
 			if wparam == 1 {
 				current := t.engine.GetIMEMode()
 				if t.engine.SetIMEMode(1 - current) {
@@ -101,7 +106,7 @@ func (t *TrayUI) StartHotkeyListener() {
 				}
 			}
 			return 0
-		case 0x0002:
+		case 0x0002: // WM_DESTROY
 			winapi.UnregisterHotKey(hwnd, 1)
 			winapi.PostQuitMessage(0)
 			return 0
