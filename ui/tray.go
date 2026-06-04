@@ -52,10 +52,7 @@ func (t *TrayUI) onReady() {
 	mQuit.Click(func() { systray.Quit() })
 
 	systray.SetOnClick(func(menu systray.IMenu) {
-		current := t.engine.GetIMEMode()
-		if t.engine.SetIMEMode(1 - current) {
-			t.SyncUI()
-		}
+		t.toggleMode()
 	})
 
 	t.SyncUI()
@@ -65,6 +62,13 @@ func (t *TrayUI) onReady() {
 
 func (t *TrayUI) onExit() {
 	t.cancel()
+}
+
+func (t *TrayUI) toggleMode() {
+	current := t.engine.GetIMEMode()
+	if t.engine.SetIMEMode(1 - current) {
+		t.SyncUI()
+	}
 }
 
 func (t *TrayUI) SyncUI() {
@@ -99,11 +103,11 @@ func (t *TrayUI) StartHotkeyListener() {
 		switch msg {
 		case 0x0312:
 			if wparam == 1 {
-				current := t.engine.GetIMEMode()
-				if t.engine.SetIMEMode(1 - current) {
-					t.SyncUI()
-				}
+				t.toggleMode()
 			}
+			return 0
+		case 0x0400 + 777:
+			t.toggleMode()
 			return 0
 		case 0x0010:
 			winapi.UnregisterHotKey(hwnd, 1)
