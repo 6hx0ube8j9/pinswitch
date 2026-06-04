@@ -43,7 +43,7 @@ func (t *TrayUI) onReady() {
 	t.mFullPinyin = systray.AddMenuItem("全拼模式", "")
 	t.mDoublePinyin = systray.AddMenuItem("双拼模式", "")
 	systray.AddSeparator()
-	t.mAutoStart = systray.AddMenuItem("开机自启动", "")
+	t.mAutoStart = systray.AddMenuItem("开机启动", "")
 	mQuit := systray.AddMenuItem("退出程序", "")
 
 	t.mFullPinyin.Click(func() { t.engine.SetIMEMode(0); t.SyncUI() })
