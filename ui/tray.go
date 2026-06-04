@@ -109,7 +109,7 @@ func (t *TrayUI) onReady() {
 		helpText := "【快捷键说明】\n\n" +
 			"Shift+Ctrl+Y：切换全拼/双拼\n" +
 			"Shift+Ctrl+Win+Y：显示/隐藏托盘图标\n" +
-			"按住 Shift 双击程序：显示/隐藏托盘图标"
+			"Shift+双击程序：显示/隐藏托盘图标"
 		winapi.MessageBox(0, helpText, "Pinswitch", 0x00000040)
 	})
 
