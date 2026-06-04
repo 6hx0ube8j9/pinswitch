@@ -13,12 +13,10 @@ import (
 
 func KillOldInstances() {
 	cmd := exec.Command("taskkill", "/F", "/IM", "pinswitch.exe")
-	cmd.SysProcAttr = &exec.Cmd{
-		SysProcAttr: &syscall.SysProcAttr{
-			HideWindow:    true,
-			CreationFlags: 0x08000000,
-		},
-	}.SysProcAttr
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: 0x08000000,
+	}
 	_ = cmd.Run()
 }
 
