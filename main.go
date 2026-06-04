@@ -3,29 +3,34 @@
 package main
 
 import (
-	"os"
+	"os/exec"
 	"syscall"
-	"unsafe"
+	"time"
 	"pinswitch/core"
 	"pinswitch/ui"
 	"pinswitch/winapi"
 )
 
-var (
-	kernel32        = syscall.NewLazyDLL("kernel32.dll")
-	procCreateMutex = kernel32.NewProc("CreateMutexW")
-)
+func KillOldInstances() {
+	cmd := exec.Command("taskkill", "/F", "/IM", "pinswitch.exe")
+	cmd.SysProcAttr = &exec.Cmd{
+		SysProcAttr: &syscall.SysProcAttr{
+			HideWindow:    true,
+			CreationFlags: 0x08000000,
+		},
+	}.SysProcAttr
+	_ = cmd.Run()
+}
 
 func main() {
-	mutexName, _ := syscall.UTF16PtrFromString("Local\\PinswitchUniqueMutexSecure")
-	ret, _, _ := procCreateMutex.Call(0, 1, uintptr(unsafe.Pointer(mutexName)))
-	if ret == 0 || syscall.GetLastError() == syscall.Errno(183) {
-		winapi.KillOldInstances("pinswitch.exe", uint32(os.Getpid()))
+	ret, err := winapi.CreateMutex("Local\\PinswitchUniqueMutexSecure")
+	if ret == 0 || err == syscall.Errno(183) {
+		KillOldInstances()
+		time.Sleep(200 * time.Millisecond)
 		return
 	}
 
 	engine := core.NewSwitchEngine()
 	tray := ui.NewTrayUI(engine)
-
 	tray.Start()
 }
