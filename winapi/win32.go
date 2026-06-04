@@ -19,6 +19,9 @@ var (
 	procPostQuitMessage          = user32.NewProc("PostQuitMessage")
 	procFindWindowW              = user32.NewProc("FindWindowW")
 	procSendMessageW             = user32.NewProc("SendMessageW")
+	// 【新增】引入异步投递消息和获取窗口进程 PID 的 API
+	procPostMessageW             = user32.NewProc("PostMessageW")
+	procGetWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
 	
 	advapi32                     = syscall.NewLazyDLL("advapi32.dll")
 	procRegOpenKeyEx             = advapi32.NewProc("RegOpenKeyExW")
@@ -72,10 +75,11 @@ type TagWNDCLASS struct {
 	LpszClassName *uint16
 }
 
+// 【优化】直接通过 Call 返回的最后一个参数安全获取系统全局错误码
 func CreateMutex(name string) (uintptr, error) {
 	namePtr, _ := syscall.UTF16PtrFromString(name)
-	ret, _, _ := procCreateMutex.Call(0, 1, uintptr(unsafe.Pointer(namePtr)))
-	return ret, syscall.GetLastError()
+	ret, _, err := procCreateMutex.Call(0, 1, uintptr(unsafe.Pointer(namePtr)))
+	return ret, err
 }
 
 func FindWindow(className string) uintptr {
@@ -89,12 +93,24 @@ func SendMessage(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 	return ret
 }
 
+// 【新增】异步非阻塞投递消息
+func PostMessage(hwnd uintptr, msg uint32, wparam, lparam uintptr) bool {
+	ret, _, _ := procPostMessageW.Call(hwnd, uintptr(msg), wparam, lparam)
+	return ret != 0
+}
+
+// 【新增】获取窗口所属的进程 ID
+func GetWindowThreadProcessId(hwnd uintptr, pid *uint32) uint32 {
+	ret, _, _ := procGetWindowThreadProcessId.Call(hwnd, uintptr(unsafe.Pointer(pid)))
+	return uint32(ret)
+}
+
 func RegisterClass(className string, wndProc func(hwnd uintptr, msg uint32, wparam uintptr, lparam uintptr) uintptr) {
 	namePtr, _ := syscall.UTF16PtrFromString(className)
-	hInstance, _, _ := procCloseHandle.Call(0)
+	// 用 0 调用 CloseHandle 是不正确的习惯，此处直接传入 0 获取 hInstance
 	wc := TagWNDCLASS{
 		LpfnWndProc:   syscall.NewCallback(wndProc),
-		HInstance:     hInstance,
+		HInstance:     0,
 		LpszClassName: namePtr,
 	}
 	procRegisterClass.Call(uintptr(unsafe.Pointer(&wc)))
@@ -102,8 +118,7 @@ func RegisterClass(className string, wndProc func(hwnd uintptr, msg uint32, wpar
 
 func CreateWindowEx(className string) uintptr {
 	namePtr, _ := syscall.UTF16PtrFromString(className)
-	hInstance, _, _ := procCloseHandle.Call(0)
-	hwnd, _, _ := procCreateWindowEx.Call(0, uintptr(unsafe.Pointer(namePtr)), uintptr(unsafe.Pointer(namePtr)), 0, 0, 0, 0, 0, HWND_MESSAGE, 0, hInstance, 0)
+	hwnd, _, _ := procCreateWindowEx.Call(0, uintptr(unsafe.Pointer(namePtr)), uintptr(unsafe.Pointer(namePtr)), 0, 0, 0, 0, 0, HWND_MESSAGE, 0, 0, 0)
 	return hwnd
 }
 
