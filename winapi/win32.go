@@ -19,6 +19,7 @@ var (
 	procPostQuitMessage          = user32.NewProc("PostQuitMessage")
 	procFindWindowW              = user32.NewProc("FindWindowW")
 	procSendMessageW             = user32.NewProc("SendMessageW")
+	procPostMessageW             = user32.NewProc("PostMessageW")
 	
 	advapi32                     = syscall.NewLazyDLL("advapi32.dll")
 	procRegOpenKeyEx             = advapi32.NewProc("RegOpenKeyExW")
@@ -45,6 +46,7 @@ const (
 	REG_NOTIFY_CHANGE_LAST_SET = 0x00000004
 	WAIT_OBJECT_0              = 0x00000000
 	HWND_MESSAGE               = ^uintptr(2)
+	WM_TRIGGER_SWITCH          = 0x0400 + 777
 )
 
 type TagMSG struct {
@@ -84,6 +86,11 @@ func FindWindow(className string) uintptr {
 func SendMessage(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 	ret, _, _ := procSendMessageW.Call(hwnd, uintptr(msg), wparam, lparam)
 	return ret
+}
+
+func PostMessage(hwnd uintptr, msg uint32, wparam, lparam uintptr) bool {
+	ret, _, _ := procPostMessageW.Call(hwnd, uintptr(msg), wparam, lparam)
+	return ret != 0
 }
 
 func RegisterClass(className string, wndProc func(hwnd uintptr, msg uint32, wparam uintptr, lparam uintptr) uintptr) {
