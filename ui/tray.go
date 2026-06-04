@@ -32,9 +32,7 @@ func NewTrayUI(engine *core.SwitchEngine) *TrayUI {
 }
 
 func (t *TrayUI) Start() {
-	// systray.Run 会阻塞主线程
 	systray.Run(t.onReady, t.onExit)
-	// 【核心修复】：托盘完全退出后，确保进程立刻 100% 退出，绝不在后台沦为僵尸进程
 	os.Exit(0)
 }
 
@@ -66,7 +64,7 @@ func (t *TrayUI) onReady() {
 }
 
 func (t *TrayUI) onExit() {
-	t.cancel() // 解除 context，通知注册表 Watcher 协程退出
+	t.cancel()
 }
 
 func (t *TrayUI) SyncUI() {
@@ -99,7 +97,7 @@ func (t *TrayUI) StartHotkeyListener() {
 	className := "PinswitchHotkeyWindow_Unique_Class"
 	winapi.RegisterClass(className, func(hwnd uintptr, msg uint32, wparam uintptr, lparam uintptr) uintptr {
 		switch msg {
-		case 0x0312: // WM_HOTKEY
+		case 0x0312:
 			if wparam == 1 {
 				current := t.engine.GetIMEMode()
 				if t.engine.SetIMEMode(1 - current) {
@@ -107,17 +105,12 @@ func (t *TrayUI) StartHotkeyListener() {
 				}
 			}
 			return 0
-			
-		case 0x0010: // WM_CLOSE (新实例让老实例退出)
-			// 1. 立即释放全局快捷键，确保新实例能秒秒钟成功注册热键
+		case 0x0010:
 			winapi.UnregisterHotKey(hwnd, 1)
-			// 2. 销毁窗口。这会触发 WM_DESTROY 消息注入，终止 GetMessage 阻塞
 			winapi.DestroyWindow(hwnd)
-			// 3. 让托盘库退出
 			systray.Quit()
 			return 0
-			
-		case 0x0002: // WM_DESTROY
+		case 0x0002:
 			winapi.PostQuitMessage(0)
 			return 0
 		}
@@ -129,7 +122,6 @@ func (t *TrayUI) StartHotkeyListener() {
 		return
 	}
 
-	// 注册全局热键 Ctrl + Shift + Y (0x59)
 	if !winapi.RegisterHotKey(t.hwnd, 1, 0x0002|0x0004, 0x59) {
 		return
 	}
@@ -138,7 +130,7 @@ func (t *TrayUI) StartHotkeyListener() {
 	for {
 		res := winapi.GetMessage(&msg)
 		if res <= 0 {
-			break // 当收到 PostQuitMessage(0) 产生的 WM_QUIT 时，完美打破消息循环退出
+			break
 		}
 		winapi.TranslateMessage(&msg)
 		winapi.DispatchMessage(&msg)
