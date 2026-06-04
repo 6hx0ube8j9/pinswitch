@@ -5,6 +5,12 @@ import (
 	"unsafe"
 )
 
+const (
+	WM_CLOSE  = 0x0010
+	WM_HOTKEY = 0x0312
+	WM_USER   = 0x0400
+)
+
 var (
 	user32               = syscall.NewLazyDLL("user32.dll")
 	kernel32             = syscall.NewLazyDLL("kernel32.dll")
@@ -15,9 +21,7 @@ var (
 	procTranslateMessage = user32.NewProc("TranslateMessage")
 	procDispatchMessage  = user32.NewProc("DispatchMessageW")
 	procDefWindowProc    = user32.NewProc("DefWindowProcW")
-	
-	procRegisterClassEx  = user32.NewProc("RegisterClassExW") 
-	
+	procRegisterClassEx  = user32.NewProc("RegisterClassExW")
 	procCreateWindowEx   = user32.NewProc("CreateWindowExW")
 	procDestroyWindow    = user32.NewProc("DestroyWindow")
 	procPostQuitMessage  = user32.NewProc("PostQuitMessage")
