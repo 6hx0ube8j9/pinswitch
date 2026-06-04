@@ -40,10 +40,11 @@ jobs:
 
       - name: Build EXE
         shell: pwsh
+        env:
+          CGO_ENABLED: "0"
+          GOOS: "windows"
+          GOARCH: "amd64"
         run: |
-          $env:CGO_ENABLED="0"
-          $env:GOOS="windows"
-          $env:GOARCH="amd64"          
           go build -ldflags="-s -w -H=windowsgui" -o pinswitch.exe .
 
       - name: Upload Artifact
