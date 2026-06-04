@@ -7,26 +7,19 @@ import (
 )
 
 var (
-	// user32.dll 核心库
-	user32                  = syscall.NewLazyDLL("user32.dll")
-	procRegisterHotKey      = user32.NewProc("RegisterHotKey")
-	procUnregisterHotKey    = user32.NewProc("UnregisterHotKey")
-	procGetMessage          = user32.NewProc("GetMessageW")
-	procSetWindowsHookExW   = user32.NewProc("SetWindowsHookExW")
-	procUnhookWindowsHookEx = user32.NewProc("UnhookWindowsHookEx")
-	procCallNextHookEx      = user32.NewProc("CallNextHookEx")
-	procGetAsyncKeyState   = user32.NewProc("GetAsyncKeyState")
+	user32                       = syscall.NewLazyDLL("user32.dll")
+	procRegisterHotKey           = user32.NewProc("RegisterHotKey")
+	procUnregisterHotKey         = user32.NewProc("UnregisterHotKey")
+	procGetMessage               = user32.NewProc("GetMessageW")
+	
+	advapi32                     = syscall.NewLazyDLL("advapi32.dll")
+	procRegOpenKeyEx             = advapi32.NewProc("RegOpenKeyExW")
+	procRegCloseKey              = advapi32.NewProc("RegCloseKey")
+	procRegQueryValueEx          = advapi32.NewProc("RegQueryValueExW")
+	procRegSetKeyValue           = advapi32.NewProc("RegSetKeyValueW")
+	procRegDeleteValue           = advapi32.NewProc("RegDeleteValueW")
+	procRegNotifyChangeKeyValue  = advapi32.NewProc("RegNotifyChangeKeyValue")
 
-	// advapi32.dll 注册表库
-	advapi32                    = syscall.NewLazyDLL("advapi32.dll")
-	procRegOpenKeyEx            = advapi32.NewProc("RegOpenKeyExW")
-	procRegCloseKey             = advapi32.NewProc("RegCloseKey")
-	procRegQueryValueEx         = advapi32.NewProc("RegQueryValueExW")
-	procRegSetKeyValue          = advapi32.NewProc("RegSetKeyValueW")
-	procRegDeleteValue          = advapi32.NewProc("RegDeleteValueW")
-	procRegNotifyChangeKeyValue = advapi32.NewProc("RegNotifyChangeKeyValue")
-
-	// kernel32.dll 系统核心库
 	kernel32                     = syscall.NewLazyDLL("kernel32.dll")
 	procCreateToolhelp32Snapshot = kernel32.NewProc("CreateToolhelp32Snapshot")
 	procProcess32First           = kernel32.NewProc("Process32FirstW")
@@ -40,7 +33,6 @@ var (
 )
 
 const (
-	// 注册表权限与类型常量
 	HKEY_CURRENT_USER          = 0x80000001
 	KEY_QUERY_VALUE            = 0x0001
 	KEY_SET_VALUE              = 0x0002
@@ -48,23 +40,12 @@ const (
 	REG_SZ                     = 1
 	REG_DWORD                  = 4
 	REG_NOTIFY_CHANGE_LAST_SET = 0x00000004
-
-	// 同步控制常量
-	WAIT_OBJECT_0 = 0x00000000
-	INFINITE      = 0xFFFFFFFF
-
-	// 进程管理常量
-	TH32CS_SNAPPROCESS = 0x00000002
-	PROCESS_TERMINATE  = 0x0001
-
-	// 底层键盘钩子与按键状态常量
-	WH_KEYBOARD_LL = 13
-	WM_KEYDOWN     = 0x0100
-	VK_SHIFT       = 0x10
-	VK_CONTROL     = 0x11
+	WAIT_OBJECT_0              = 0x00000000
+	INFINITE                   = 0xFFFFFFFF
+	TH32CS_SNAPPROCESS         = 0x00000002
+	PROCESS_TERMINATE          = 0x0001
 )
 
-// TagMSG Windows 标准消息结构体
 type TagMSG struct {
 	Hwnd    uint32
 	Message uint32
@@ -74,7 +55,6 @@ type TagMSG struct {
 	Pt      struct{ X, Y int32 }
 }
 
-// TagPROCESSENTRY32W 进程快照信息结构体
 type TagPROCESSENTRY32W struct {
 	Size            uint32
 	Usage           uint32
@@ -87,17 +67,6 @@ type TagPROCESSENTRY32W struct {
 	Flags           uint32
 	ExeFile         [260]uint16
 }
-
-// KBDLLHOOKSTRUCT 底层键盘钩子输入事件结构体
-type KBDLLHOOKSTRUCT struct {
-	VkCode      uint32
-	ScanCode    uint32
-	Flags       uint32
-	Time        uint32
-	DwExtraInfo uintptr
-}
-
-// ==================== User32 包装函数 ====================
 
 func RegisterHotKey(id int, modifiers, vk uint32) bool {
 	r1, _, _ := procRegisterHotKey.Call(0, uintptr(id), uintptr(modifiers), uintptr(vk))
@@ -112,28 +81,6 @@ func GetMessage(msg *TagMSG) int32 {
 	r1, _, _ := procGetMessage.Call(uintptr(unsafe.Pointer(msg)), 0, 0, 0)
 	return int32(r1)
 }
-
-func SetWindowsHookEx(idHook int, lpfn uintptr, hmod uintptr, dwThreadId uint32) syscall.Handle {
-	r1, _, _ := procSetWindowsHookExW.Call(uintptr(idHook), lpfn, hmod, uintptr(dwThreadId))
-	return syscall.Handle(r1)
-}
-
-func UnhookWindowsHookEx(hhk syscall.Handle) bool {
-	r1, _, _ := procUnhookWindowsHookEx.Call(uintptr(hhk))
-	return r1 != 0
-}
-
-func CallNextHookEx(hhk syscall.Handle, nCode int, wParam uintptr, lParam uintptr) uintptr {
-	r1, _, _ := procCallNextHookEx.Call(uintptr(hhk), uintptr(nCode), wParam, lParam)
-	return uintptr(r1)
-}
-
-func GetAsyncKeyState(vKey int) int16 {
-	r1, _, _ := procGetAsyncKeyState.Call(uintptr(vKey))
-	return int16(r1)
-}
-
-// ==================== Kernel32 包装函数 ====================
 
 func CreateEvent() syscall.Handle {
 	h, _, _ := procCreateEvent.Call(0, 1, 0, 0)
@@ -176,8 +123,6 @@ func KillOldInstances(targetExeName string, currentPID uint32) {
 		ret, _, _ = procProcess32Next.Call(snapshot, uintptr(unsafe.Pointer(&entry)))
 	}
 }
-
-// ==================== Advapi32 注册表包装函数 ====================
 
 func RegOpenKeyEx(hKey uintptr, path string, samDesired uint32) (syscall.Handle, error) {
 	var out syscall.Handle
