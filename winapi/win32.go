@@ -14,7 +14,6 @@ const (
 var (
 	user32               = syscall.NewLazyDLL("user32.dll")
 	kernel32             = syscall.NewLazyDLL("kernel32.dll")
-	
 	procRegisterHotKey   = user32.NewProc("RegisterHotKey")
 	procUnregisterHotKey = user32.NewProc("UnregisterHotKey")
 	procGetMessage       = user32.NewProc("GetMessageW")
@@ -27,7 +26,7 @@ var (
 	procPostQuitMessage  = user32.NewProc("PostQuitMessage")
 	procFindWindowW      = user32.NewProc("FindWindowW")
 	procPostMessageW     = user32.NewProc("PostMessageW")
-
+	procGetAsyncKeyState   = user32.NewProc("GetAsyncKeyState")
 	procCreateMutexW     = kernel32.NewProc("CreateMutexW")
 	procCloseHandle      = kernel32.NewProc("CloseHandle")
 )
@@ -144,4 +143,9 @@ func FindWindow(className string) uintptr {
 func PostMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 	ret, _, _ := procPostMessageW.Call(hwnd, uintptr(msg), wParam, lParam)
 	return ret
+}
+
+func GetAsyncKeyState(vKey int) bool {
+	ret, _, _ := procGetAsyncKeyState.Call(uintptr(vKey))
+	return int16(ret) < 0
 }
