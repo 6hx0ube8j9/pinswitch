@@ -73,12 +73,14 @@ func (t *TrayUI) Start() {
 
 func (t *TrayUI) onReady() {
 	systray.SetTitle("pinswitch")
-	systray.SetTooltip("Ctrl+Shift+Y 切换拼音\nShift+Ctrl+Win+Y 显示或隐藏托盘图标")
 
 	t.mFullPinyin = systray.AddMenuItem("全拼模式", "")
 	t.mDoublePinyin = systray.AddMenuItem("双拼模式", "")
 	systray.AddSeparator()
 	t.mAutoStart = systray.AddMenuItem("开机启动", "")
+	
+	systray.AddSeparator()
+	mHelp := systray.AddMenuItem("快捷键说明", "")
 	mQuit := systray.AddMenuItem("退出程序", "")
 
 	t.SyncUI()
@@ -101,6 +103,14 @@ func (t *TrayUI) onReady() {
 	t.mAutoStart.Click(func() {
 		t.engine.ToggleAutoStart()
 		t.SyncUI()
+	})
+
+	mHelp.Click(func() {
+		helpText := "【快捷键说明】\n\n" +
+			"Shift+Ctrl+Y：切换模式\n" +
+			"Shift+Ctrl+Win+Y：显示/隐藏托盘图标\n" +
+			"按住 Shift 双击程序：显示/隐藏托盘图标"
+		winapi.MessageBox(0, helpText, "Pinswitch", 0x00000040)
 	})
 
 	mQuit.Click(func() {
@@ -157,12 +167,14 @@ func (t *TrayUI) SyncUI() {
 
 	if mode == 1 {
 		systray.SetIcon(iconShuang)
+		systray.SetTooltip("Pinswitch: 当前为【双拼】")
 		t.mDoublePinyin.Check()
 		t.mDoublePinyin.Disable()
 		t.mFullPinyin.Uncheck()
 		t.mFullPinyin.Enable()
 	} else {
 		systray.SetIcon(iconQuan)
+		systray.SetTooltip("Pinswitch: 当前为【全拼】")
 		t.mFullPinyin.Check()
 		t.mFullPinyin.Disable()
 		t.mDoublePinyin.Uncheck()
