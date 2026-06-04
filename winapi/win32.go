@@ -27,6 +27,7 @@ var (
 	procFindWindowW      = user32.NewProc("FindWindowW")
 	procPostMessageW     = user32.NewProc("PostMessageW")
 	procGetAsyncKeyState   = user32.NewProc("GetAsyncKeyState")
+	procMessageBoxW      = user32.NewProc("MessageBoxW")
 	procCreateMutexW     = kernel32.NewProc("CreateMutexW")
 	procCloseHandle      = kernel32.NewProc("CloseHandle")
 )
@@ -148,4 +149,16 @@ func PostMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 func GetAsyncKeyState(vKey int) bool {
 	ret, _, _ := procGetAsyncKeyState.Call(uintptr(vKey))
 	return int16(ret) < 0
+}
+
+func MessageBox(hwnd uintptr, text, caption string, flags uint32) int {
+	textPtr, _ := syscall.UTF16PtrFromString(text)
+	captionPtr, _ := syscall.UTF16PtrFromString(caption)
+	ret, _, _ := procMessageBoxW.Call(
+		hwnd,
+		uintptr(unsafe.Pointer(textPtr)),
+		uintptr(unsafe.Pointer(captionPtr)),
+		uintptr(flags),
+	)
+	return int(ret)
 }
