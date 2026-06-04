@@ -73,7 +73,8 @@ func (e *SwitchEngine) ToggleAutoStart() {
 	} else {
 		exePath, err := os.Executable()
 		if err == nil {
-			k.SetStringValue(RegValRun, exePath)
+			safePath := `"` + exePath + `"`
+			k.SetStringValue(RegValRun, safePath)
 		}
 	}
 }
