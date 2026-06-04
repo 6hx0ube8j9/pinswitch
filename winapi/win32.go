@@ -6,59 +6,37 @@ import (
 )
 
 var (
-	user32                       = syscall.NewLazyDLL("user32.dll")
-	procRegisterHotKey           = user32.NewProc("RegisterHotKey")
-	procUnregisterHotKey         = user32.NewProc("UnregisterHotKey")
-	procGetMessage               = user32.NewProc("GetMessageW")
-	procTranslateMessage         = user32.NewProc("TranslateMessage")
-	procDispatchMessage          = user32.NewProc("DispatchMessageW")
-	procDefWindowProc            = user32.NewProc("DefWindowProcW")
-	procRegisterClass            = user32.NewProc("RegisterClassW")
-	procCreateWindowEx           = user32.NewProc("CreateWindowExW")
-	procDestroyWindow            = user32.NewProc("DestroyWindow")
-	procPostQuitMessage          = user32.NewProc("PostQuitMessage")
-	procFindWindowW              = user32.NewProc("FindWindowW")
-	procSendMessageW             = user32.NewProc("SendMessageW")
-	procPostMessageW             = user32.NewProc("PostMessageW")
+	user32               = syscall.NewLazyDLL("user32.dll")
+	kernel32             = syscall.NewLazyDLL("kernel32.dll")
 	
-	advapi32                     = syscall.NewLazyDLL("advapi32.dll")
-	procRegOpenKeyEx             = advapi32.NewProc("RegOpenKeyExW")
-	procRegCloseKey              = advapi32.NewProc("RegCloseKey")
-	procRegQueryValueEx          = advapi32.NewProc("RegQueryValueExW")
-	procRegSetKeyValue           = advapi32.NewProc("RegSetKeyValueW")
-	procRegDeleteKeyValue        = advapi32.NewProc("RegDeleteKeyValueW")
-	procRegNotifyChangeKeyValue  = advapi32.NewProc("RegNotifyChangeKeyValue")
+	procRegisterHotKey   = user32.NewProc("RegisterHotKey")
+	procUnregisterHotKey = user32.NewProc("UnregisterHotKey")
+	procGetMessage       = user32.NewProc("GetMessageW")
+	procTranslateMessage = user32.NewProc("TranslateMessage")
+	procDispatchMessage  = user32.NewProc("DispatchMessageW")
+	procDefWindowProc    = user32.NewProc("DefWindowProcW")
+	procRegisterClass    = user32.NewProc("RegisterClassW")
+	procCreateWindowEx   = user32.NewProc("CreateWindowExW")
+	procDestroyWindow    = user32.NewProc("DestroyWindow")
+	procPostQuitMessage  = user32.NewProc("PostQuitMessage")
+	procFindWindowW      = user32.NewProc("FindWindowW")
+	procPostMessageW     = user32.NewProc("PostMessageW")
 
-	kernel32                     = syscall.NewLazyDLL("kernel32.dll")
-	procCreateMutex              = kernel32.NewProc("CreateMutexW")
-	procCreateEvent              = kernel32.NewProc("CreateEventW")
-	procWaitForSingleObject      = kernel32.NewProc("WaitForSingleObject")
-	procResetEvent               = kernel32.NewProc("ResetEvent")
-	procCloseHandle              = kernel32.NewProc("CloseHandle")
+	procCreateMutexW     = kernel32.NewProc("CreateMutexW")
+	procCloseHandle      = kernel32.NewProc("CloseHandle")
 )
 
-const (
-	HKEY_CURRENT_USER          = 0x80000001
-	KEY_QUERY_VALUE            = 0x0001
-	KEY_NOTIFY                 = 0x0010
-	REG_DWORD                  = 4
-	REG_SZ                     = 1
-	REG_NOTIFY_CHANGE_LAST_SET = 0x00000004
-	WAIT_OBJECT_0              = 0x00000000
-	HWND_MESSAGE               = ^uintptr(2)
-	WM_TRIGGER_SWITCH          = 0x0400 + 777
-)
-
-type TagMSG struct {
+type Msg struct {
 	Hwnd    uintptr
 	Message uint32
-	Wparam  uintptr
-	Lparam  uintptr
+	WParam  uintptr
+	LParam  uintptr
 	Time    uint32
 	Pt      struct{ X, Y int32 }
 }
 
-type TagWNDCLASS struct {
+type WndClassEx struct {
+	CbSize        uint32
 	Style         uint32
 	LpfnWndProc   uintptr
 	CbClsExtra    int32
@@ -69,152 +47,95 @@ type TagWNDCLASS struct {
 	HbrBackground uintptr
 	LpszMenuName  *uint16
 	LpszClassName *uint16
+	HIconSm       uintptr
 }
 
 func CreateMutex(name string) (uintptr, error) {
 	namePtr, _ := syscall.UTF16PtrFromString(name)
-	ret, _, err := procCreateMutex.Call(0, 1, uintptr(unsafe.Pointer(namePtr)))
-	return ret, err
+	ret, _, err := procCreateMutexW.Call(0, 0, uintptr(unsafe.Pointer(namePtr)))
+	if ret != 0 && err == syscall.Errno(183) {
+		return ret, err
+	}
+	if ret == 0 {
+		return 0, err
+	}
+	return ret, nil
 }
 
-func FindWindow(className string) uintptr {
-	namePtr, _ := syscall.UTF16PtrFromString(className)
-	ret, _, _ := procFindWindowW.Call(uintptr(unsafe.Pointer(namePtr)), 0)
-	return ret
+func CloseHandle(handle syscall.Handle) {
+	procCloseHandle.Call(uintptr(handle))
 }
 
-func SendMessage(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
-	ret, _, _ := procSendMessageW.Call(hwnd, uintptr(msg), wparam, lparam)
-	return ret
-}
-
-func PostMessage(hwnd uintptr, msg uint32, wparam, lparam uintptr) bool {
-	ret, _, _ := procPostMessageW.Call(hwnd, uintptr(msg), wparam, lparam)
+func RegisterHotKey(hwnd uintptr, id int, fsModifiers, vk uint32) bool {
+	ret, _, _ := procRegisterHotKey.Call(hwnd, uintptr(id), uintptr(fsModifiers), uintptr(vk))
 	return ret != 0
 }
 
+func UnregisterHotKey(hwnd uintptr, id int) bool {
+	ret, _, _ := procUnregisterHotKey.Call(hwnd, uintptr(id))
+	return ret != 0
+}
+
+func GetMessage(msg *Msg, hwnd uintptr, msgFilterMin, msgFilterMax uint32) int {
+	ret, _, _ := procGetMessage.Call(uintptr(unsafe.Pointer(msg)), hwnd, uintptr(msgFilterMin), uintptr(msgFilterMax))
+	return int(ret)
+}
+
+func TranslateMessage(msg *Msg) bool {
+	ret, _, _ := procTranslateMessage.Call(uintptr(unsafe.Pointer(msg)))
+	return ret != 0
+}
+
+func DispatchMessage(msg *Msg) uintptr {
+	ret, _, _ := procDispatchMessage.Call(uintptr(unsafe.Pointer(msg)))
+	return ret
+}
+
+func DefWindowProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
+	ret, _, _ := procDefWindowProc.Call(hwnd, uintptr(msg), wParam, lParam)
+	return ret
+}
+
 func RegisterClass(className string, wndProc func(hwnd uintptr, msg uint32, wparam uintptr, lparam uintptr) uintptr) {
-	namePtr, _ := syscall.UTF16PtrFromString(className)
-	wc := TagWNDCLASS{
+	classNamePtr, _ := syscall.UTF16PtrFromString(className)
+	wc := WndClassEx{
+		CbSize:        uint32(unsafe.Sizeof(WndClassEx{})),
 		LpfnWndProc:   syscall.NewCallback(wndProc),
-		HInstance:     0,
-		LpszClassName: namePtr,
+		LpszClassName: classNamePtr,
 	}
 	procRegisterClass.Call(uintptr(unsafe.Pointer(&wc)))
 }
 
-func CreateWindowEx(className string) uintptr {
-	namePtr, _ := syscall.UTF16PtrFromString(className)
-	hwnd, _, _ := procCreateWindowEx.Call(0, uintptr(unsafe.Pointer(namePtr)), uintptr(unsafe.Pointer(namePtr)), 0, 0, 0, 0, 0, HWND_MESSAGE, 0, 0, 0)
-	return hwnd
+func CreateWindowEx(dwExStyle uint32, lpClassName, lpWindowName string, dwStyle uint32, x, y, nWidth, nHeight int32, hWndParent, hMenu, hInstance, lpParam uintptr) uintptr {
+	classNamePtr, _ := syscall.UTF16PtrFromString(lpClassName)
+	windowNamePtr, _ := syscall.UTF16PtrFromString(lpWindowName)
+	ret, _, _ := procCreateWindowEx.Call(
+		uintptr(dwExStyle),
+		uintptr(unsafe.Pointer(classNamePtr)),
+		uintptr(unsafe.Pointer(windowNamePtr)),
+		uintptr(dwStyle),
+		uintptr(x), uintptr(y), uintptr(nWidth), uintptr(nHeight),
+		hWndParent, hMenu, hInstance, lpParam,
+	)
+	return ret
 }
 
-func DestroyWindow(hwnd uintptr) {
-	procDestroyWindow.Call(hwnd)
+func DestroyWindow(hwnd uintptr) bool {
+	ret, _, _ := procDestroyWindow.Call(hwnd)
+	return ret != 0
 }
 
 func PostQuitMessage(exitCode int32) {
 	procPostQuitMessage.Call(uintptr(exitCode))
 }
 
-func DefWindowProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
-	r1, _, _ := procDefWindowProc.Call(hwnd, uintptr(msg), wparam, lparam)
-	return r1
+func FindWindow(className string) uintptr {
+	classNamePtr, _ := syscall.UTF16PtrFromString(className)
+	ret, _, _ := procFindWindowW.Call(uintptr(unsafe.Pointer(classNamePtr)), 0)
+	return ret
 }
 
-func RegisterHotKey(hwnd uintptr, id int, modifiers, vk uint32) bool {
-	r1, _, _ := procRegisterHotKey.Call(hwnd, uintptr(id), uintptr(modifiers), uintptr(vk))
-	return r1 != 0
-}
-
-func UnregisterHotKey(hwnd uintptr, id int) {
-	procUnregisterHotKey.Call(hwnd, uintptr(id))
-}
-
-func GetMessage(msg *TagMSG) int32 {
-	r1, _, _ := procGetMessage.Call(uintptr(unsafe.Pointer(msg)), 0, 0, 0)
-	return int32(r1)
-}
-
-func TranslateMessage(msg *TagMSG) {
-	procTranslateMessage.Call(uintptr(unsafe.Pointer(msg)))
-}
-
-func DispatchMessage(msg *TagMSG) {
-	procDispatchMessage.Call(uintptr(unsafe.Pointer(msg)))
-}
-
-func CreateEvent() syscall.Handle {
-	h, _, _ := procCreateEvent.Call(0, 1, 0, 0)
-	return syscall.Handle(h)
-}
-
-func CloseHandle(h syscall.Handle) {
-	procCloseHandle.Call(uintptr(h))
-}
-
-func WaitForSingleObject(h syscall.Handle, ms uint32) uint32 {
-	r1, _, _ := procWaitForSingleObject.Call(uintptr(h), uintptr(ms))
-	return uint32(r1)
-}
-
-func ResetEvent(h syscall.Handle) {
-	procResetEvent.Call(uintptr(h))
-}
-
-func RegOpenKeyEx(hKey uintptr, path string, samDesired uint32) (syscall.Handle, error) {
-	var out uintptr
-	pathPtr, _ := syscall.UTF16PtrFromString(path)
-	r1, _, _ := procRegOpenKeyEx.Call(hKey, uintptr(unsafe.Pointer(pathPtr)), 0, uintptr(samDesired), uintptr(unsafe.Pointer(&out)))
-	if r1 != 0 {
-		return 0, syscall.Errno(r1)
-	}
-	return syscall.Handle(out), nil
-}
-
-func RegCloseKey(hKey syscall.Handle) {
-	procRegCloseKey.Call(uintptr(hKey))
-}
-
-func RegQueryValueExDWORD(hKey syscall.Handle, valueName string) (uint32, error) {
-	valuePtr, _ := syscall.UTF16PtrFromString(valueName)
-	var value, size uint32 = 0, 4
-	r1, _, _ := procRegQueryValueEx.Call(uintptr(hKey), uintptr(unsafe.Pointer(valuePtr)), 0, 0, uintptr(unsafe.Pointer(&value)), uintptr(unsafe.Pointer(&size)))
-	if r1 != 0 {
-		return 0, syscall.Errno(r1)
-	}
-	return value, nil
-}
-
-func RegQueryValueExSZ(hKey syscall.Handle, valueName string) bool {
-	valuePtr, _ := syscall.UTF16PtrFromString(valueName)
-	var size uint32 = 520
-	buf := make([]uint16, 260)
-	r1, _, _ := procRegQueryValueEx.Call(uintptr(hKey), uintptr(unsafe.Pointer(valuePtr)), 0, 0, uintptr(unsafe.Pointer(&buf[0])), uintptr(unsafe.Pointer(&size)))
-	return r1 == 0
-}
-
-func RegSetKeyValueDWORD(path, valueName string, value uint32) {
-	pathPtr, _ := syscall.UTF16PtrFromString(path)
-	valuePtr, _ := syscall.UTF16PtrFromString(valueName)
-	procRegSetKeyValue.Call(HKEY_CURRENT_USER, uintptr(unsafe.Pointer(pathPtr)), uintptr(unsafe.Pointer(valuePtr)), REG_DWORD, uintptr(unsafe.Pointer(&value)), 4)
-}
-
-func RegSetKeyValueSZ(path, valueName, valueStr string) {
-	pathPtr, _ := syscall.UTF16PtrFromString(path)
-	valuePtr, _ := syscall.UTF16PtrFromString(valueName)
-	valStr := `"` + valueStr + `"`
-	valPtr, _ := syscall.UTF16PtrFromString(valStr)
-	size := uint32((len(valStr) + 1) * 2)
-	procRegSetKeyValue.Call(HKEY_CURRENT_USER, uintptr(unsafe.Pointer(pathPtr)), uintptr(unsafe.Pointer(valuePtr)), REG_SZ, uintptr(unsafe.Pointer(valPtr)), uintptr(size))
-}
-
-func RegDeleteKeyValue(path, valueName string) {
-	pathPtr, _ := syscall.UTF16PtrFromString(path)
-	valuePtr, _ := syscall.UTF16PtrFromString(valueName)
-	procRegDeleteKeyValue.Call(HKEY_CURRENT_USER, uintptr(unsafe.Pointer(pathPtr)), uintptr(unsafe.Pointer(valuePtr)))
-}
-
-func RegNotifyChangeKeyValue(hKey syscall.Handle, hEvent syscall.Handle) {
-	procRegNotifyChangeKeyValue.Call(uintptr(hKey), 0, REG_NOTIFY_CHANGE_LAST_SET, uintptr(hEvent), 1)
+func PostMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
+	ret, _, _ := procPostMessageW.Call(hwnd, uintptr(msg), wParam, lParam)
+	return ret
 }
