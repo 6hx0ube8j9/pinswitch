@@ -11,10 +11,10 @@ import (
 
 func main() {
 	ret, err := winapi.CreateMutex("Local\\PinswitchUniqueMutexSecure")
-	if err == syscall.Errno(183) { 
+	if err == syscall.Errno(183) {
 		oldHwnd := winapi.FindWindow("PinswitchHotkeyWindow_Unique_Class")
 		if oldHwnd != 0 {
-			winapi.PostMessage(oldHwnd, 0x0400+777, 0, 0)
+			winapi.PostMessage(oldHwnd, winapi.WM_USER+777, 0, 0)
 		}
 		return
 	} else if ret == 0 {
