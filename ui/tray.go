@@ -150,9 +150,19 @@ func (t *TrayUI) toggleHide() {
 	isHidden := t.engine.IsTrayHidden()
 	t.engine.SetTrayHidden(!isHidden)
 
+	if t.hwnd != 0 {
+		winapi.DestroyWindow(t.hwnd)
+		t.hwnd = 0
+	}
+
 	exePath, _ := os.Executable()
-	cmd := exec.Command(exePath)
+	cmd := exec.Command(exePath, "-restart")
 	cmd.Start()
+	
+	if !isHidden {
+		systray.Quit()
+		time.Sleep(100 * time.Millisecond)
+	}
 
 	os.Exit(0)
 }
@@ -167,14 +177,14 @@ func (t *TrayUI) SyncUI() {
 
 	if mode == 1 {
 		systray.SetIcon(iconShuang)
-		systray.SetTooltip("当前: 双拼模式")
+		systray.SetTooltip("Pinswitch: 双拼模式")
 		t.mDoublePinyin.Check()
 		t.mDoublePinyin.Disable()
 		t.mFullPinyin.Uncheck()
 		t.mFullPinyin.Enable()
 	} else {
 		systray.SetIcon(iconQuan)
-		systray.SetTooltip("当前: 全拼模式")
+		systray.SetTooltip("Pinswitch: 全拼模式")
 		t.mFullPinyin.Check()
 		t.mFullPinyin.Disable()
 		t.mDoublePinyin.Uncheck()
