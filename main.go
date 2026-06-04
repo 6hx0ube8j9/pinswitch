@@ -14,11 +14,22 @@ import (
 
 func main() {
 	isRestart := len(os.Args) > 1 && os.Args[1] == "-restart"
+
+	var ret uintptr
+	var err error
+
 	if isRestart {
-		time.Sleep(500 * time.Millisecond)
+		for i := 0; i < 30; i++ {
+			ret, err = winapi.CreateMutex("Local\\PinswitchUniqueMutexSecure")
+			if err != syscall.Errno(183) && ret != 0 {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	} else {
+		ret, err = winapi.CreateMutex("Local\\PinswitchUniqueMutexSecure")
 	}
 
-	ret, err := winapi.CreateMutex("Local\\PinswitchUniqueMutexSecure")
 	if err == syscall.Errno(183) {
 		if isRestart {
 			return
