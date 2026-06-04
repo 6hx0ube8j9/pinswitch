@@ -1,8 +1,8 @@
 package core
 
 import (
+	"context"
 	"os"
-	"runtime"
 	"sync/atomic"
 	"pinswitch/winapi"
 )
@@ -37,6 +37,9 @@ func (e *SwitchEngine) GetIMEMode() uint32 {
 }
 
 func (e *SwitchEngine) SetIMEMode(mode uint32) bool {
+	if e.GetIMEMode() == mode {
+		return false
+	}
 	if !atomic.CompareAndSwapInt32(&e.IsWriting, 0, 1) {
 		return false
 	}
@@ -47,25 +50,26 @@ func (e *SwitchEngine) SetIMEMode(mode uint32) bool {
 }
 
 func (e *SwitchEngine) IsAutoStart() bool {
-	return winapi.IsAutoStartEnabled(RegPathRun, RegValRun)
+	hKey, err := winapi.RegOpenKeyEx(winapi.HKEY_CURRENT_USER, RegPathRun, winapi.KEY_QUERY_VALUE)
+	if err != nil {
+		return false
+	}
+	defer winapi.RegCloseKey(hKey)
+	return winapi.RegQueryValueExSZ(hKey, RegValRun)
 }
 
 func (e *SwitchEngine) ToggleAutoStart() {
 	if e.IsAutoStart() {
-		hKey, err := winapi.RegOpenKeyEx(winapi.HKEY_CURRENT_USER, RegPathRun, winapi.KEY_SET_VALUE)
-		if err == nil {
-			winapi.RegDeleteValue(hKey, RegValRun)
-			winapi.RegCloseKey(hKey)
-		}
+		winapi.RegDeleteKeyValue(RegPathRun, RegValRun)
 	} else {
 		exePath, err := os.Executable()
 		if err == nil {
-			winapi.EnableAutoStart(RegPathRun, RegValRun, exePath)
+			winapi.RegSetKeyValueSZ(RegPathRun, RegValRun, exePath)
 		}
 	}
 }
 
-func (e *SwitchEngine) WatchRegistry(onChanged func()) {
+func (e *SwitchEngine) WatchRegistry(ctx context.Context, onChanged func()) {
 	hKey, err := winapi.RegOpenKeyEx(winapi.HKEY_CURRENT_USER, RegPathInput, winapi.KEY_NOTIFY|winapi.KEY_QUERY_VALUE)
 	if err != nil {
 		return
@@ -79,15 +83,19 @@ func (e *SwitchEngine) WatchRegistry(onChanged func()) {
 	defer winapi.CloseHandle(hEvent)
 
 	for {
-		winapi.RegNotifyChangeKeyValue(hKey, hEvent)
-		res := winapi.WaitForSingleObject(hEvent, winapi.INFINITE)
-		if res == winapi.WAIT_OBJECT_0 {
-			winapi.ResetEvent(hEvent)
-			if atomic.LoadInt32(&e.IsWriting) == 1 {
-				continue
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			winapi.RegNotifyChangeKeyValue(hKey, hEvent)
+			res := winapi.WaitForSingleObject(hEvent, 100)
+			if res == winapi.WAIT_OBJECT_0 {
+				winapi.ResetEvent(hEvent)
+				if atomic.LoadInt32(&e.IsWriting) == 1 {
+					continue
+				}
+				onChanged()
 			}
-			onChanged()
 		}
 	}
-	runtime.KeepAlive(hKey)
 }
