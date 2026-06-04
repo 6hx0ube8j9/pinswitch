@@ -1,4 +1,4 @@
-module ime-switcher
+module pinswitch
 
 go 1.23
 
