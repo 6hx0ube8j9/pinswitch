@@ -1,4 +1,4 @@
-name: Build IME Switcher
+name: Build pinswitch
 
 on:
   push:
@@ -31,9 +31,10 @@ jobs:
         run: |
           go install github.com/tc-hib/go-winres@latest
           $GOBIN = "$(go env GOPATH)\bin"
-          if (Test-Path "icons/app.ico") {
-            & "$GOBIN\go-winres.exe" simply --icon icons/app.ico
+          if (Test-Path "ui/icons/app.ico") {
+            & "$GOBIN\go-winres.exe" simply --icon ui/icons/app.ico
           } else {
+            Write-Error "找不到 ui/icons/app.ico 文件，请检查路径！"
             exit 1
           }
 
@@ -43,10 +44,11 @@ jobs:
           $env:CGO_ENABLED="0"
           $env:GOOS="windows"
           $env:GOARCH="amd64"          
-          go build -ldflags="-s -w -H=windowsgui" -o ime-switcher.exe .
+          go build -ldflags="-s -w -H=windowsgui" -o pinswitch.exe .
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ime-switcher
-          path: ime-switcher.exe
+          # 【已对齐】制品名称和路径采用最新扁平化结构
+          name: pinswitch
+          path: pinswitch.exe
