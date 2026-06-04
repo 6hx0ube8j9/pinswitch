@@ -106,7 +106,7 @@ func (t *TrayUI) onExit() {
 	t.cancel() 
 
 	if t.hwnd != 0 {
-		winapi.PostMessage(t.hwnd, 0x0010, 0, 0)
+		winapi.PostMessage(t.hwnd, winapi.WM_CLOSE, 0, 0)
 	}
 }
 
@@ -161,15 +161,15 @@ func (t *TrayUI) StartHotkeyListener() {
 	className := "PinswitchHotkeyWindow_Unique_Class"
 	winapi.RegisterClass(className, func(hwnd uintptr, msg uint32, wparam uintptr, lparam uintptr) uintptr {
 		switch msg {
-		case 0x0312: 
+		case winapi.WM_HOTKEY: 
 			if wparam == 1 {
 				t.toggleMode()
 			}
 			return 0
-		case 0x0400 + 777: 
+		case winapi.WM_USER + 777: 
 			t.toggleMode()
 			return 0
-		case 0x0010: 
+		case winapi.WM_CLOSE: 
 			winapi.UnregisterHotKey(hwnd, 1)
 			winapi.DestroyWindow(hwnd)
 			winapi.PostQuitMessage(0)
