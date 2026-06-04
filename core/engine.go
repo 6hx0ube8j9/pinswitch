@@ -10,7 +10,7 @@ const (
 	RegPathInput = `SOFTWARE\Microsoft\InputMethod\Settings\CHS`
 	RegValInput  = "Enable Double Pinyin"
 	RegPathRun   = `Software\Microsoft\Windows\CurrentVersion\Run`
-	RegValRun    = "PinswitchAutoStart" // 内部注册表键名也同步扁平化
+	RegValRun    = "PinswitchAutoStart"
 )
 
 type SwitchEngine struct {
@@ -84,6 +84,5 @@ func (e *SwitchEngine) WatchRegistry(onChanged func()) {
 			onChanged()
 		}
 	}
-	// 内存安全保障：确保整个进程生命周期内外部 API 句柄不被 Go 意外释放
 	runtime.KeepAlive(hKey)
 }
