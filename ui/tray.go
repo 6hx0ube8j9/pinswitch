@@ -4,7 +4,12 @@ import (
 	_ "embed"
 	"context"
 	"os"
+	"os/signal"
 	"runtime"
+	"sync"
+	"syscall"
+	"time"
+
 	"pinswitch/core"
 	"pinswitch/winapi"
 	"github.com/energye/systray"
@@ -21,19 +26,39 @@ type TrayUI struct {
 	mFullPinyin   *systray.MenuItem
 	mDoublePinyin *systray.MenuItem
 	mAutoStart    *systray.MenuItem
+	
 	hwnd          uintptr
 	ctx           context.Context
 	cancel        context.CancelFunc
+
+	currentMode   uint32
+	lastToggle    time.Time
+	toggleMu      sync.Mutex
 }
 
 func NewTrayUI(engine *core.SwitchEngine) *TrayUI {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &TrayUI{engine: engine, ctx: ctx, cancel: cancel}
+	return &TrayUI{
+		engine:      engine,
+		ctx:         ctx,
+		cancel:      cancel,
+		currentMode: 999, 
+	}
 }
 
 func (t *TrayUI) Start() {
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		select {
+		case <-sigs:
+			systray.Quit()
+		case <-t.ctx.Done():
+		}
+	}()
+
 	systray.Run(t.onReady, t.onExit)
-	os.Exit(0)
 }
 
 func (t *TrayUI) onReady() {
@@ -46,25 +71,52 @@ func (t *TrayUI) onReady() {
 	t.mAutoStart = systray.AddMenuItem("开机启动", "")
 	mQuit := systray.AddMenuItem("退出程序", "")
 
-	t.mFullPinyin.Click(func() { t.engine.SetIMEMode(0); t.SyncUI() })
-	t.mDoublePinyin.Click(func() { t.engine.SetIMEMode(1); t.SyncUI() })
-	t.mAutoStart.Click(func() { t.engine.ToggleAutoStart(); t.SyncUI() })
-	mQuit.Click(func() { systray.Quit() })
+	t.SyncUI()
 
-	systray.SetOnClick(func(menu systray.IMenu) {
-		t.toggleMode()
+	go t.StartHotkeyListener()
+	go t.engine.WatchRegistry(t.ctx, func() {
+		t.SyncUI()
 	})
 
-	t.SyncUI()
-	go t.engine.WatchRegistry(t.ctx, t.SyncUI)
-	go t.StartHotkeyListener()
+	go func() {
+		for {
+			select {
+			case <-t.mFullPinyin.ClickedCh:
+				t.engine.SetIMEMode(0)
+				t.SyncUI()
+			case <-t.mDoublePinyin.ClickedCh:
+				t.engine.SetIMEMode(1)
+				t.SyncUI()
+			case <-t.mAutoStart.ClickedCh:
+				t.engine.ToggleAutoStart()
+				t.SyncUI()
+			case <-mQuit.ClickedCh:
+				systray.Quit()
+				return
+			case <-t.ctx.Done():
+				return
+			}
+		}
+	}()
 }
 
 func (t *TrayUI) onExit() {
 	t.cancel()
+
+	if t.hwnd != 0 {
+		winapi.PostMessage(t.hwnd, 0x0010, 0, 0)
+	}
 }
 
 func (t *TrayUI) toggleMode() {
+	t.toggleMu.Lock()
+	defer t.toggleMu.Unlock()
+
+	if time.Since(t.lastToggle) < 200*time.Millisecond {
+		return
+	}
+	t.lastToggle = time.Now()
+
 	current := t.engine.GetIMEMode()
 	if t.engine.SetIMEMode(1 - current) {
 		t.SyncUI()
@@ -73,6 +125,11 @@ func (t *TrayUI) toggleMode() {
 
 func (t *TrayUI) SyncUI() {
 	mode := t.engine.GetIMEMode()
+	if mode == t.currentMode {
+		return
+	}
+	t.currentMode = mode
+
 	if mode == 1 {
 		systray.SetIcon(iconShuang)
 		t.mDoublePinyin.Check()
@@ -112,28 +169,24 @@ func (t *TrayUI) StartHotkeyListener() {
 		case 0x0010:
 			winapi.UnregisterHotKey(hwnd, 1)
 			winapi.DestroyWindow(hwnd)
-			systray.Quit()
-			return 0
-		case 0x0002:
 			winapi.PostQuitMessage(0)
 			return 0
 		}
 		return winapi.DefWindowProc(hwnd, msg, wparam, lparam)
 	})
 
-	t.hwnd = winapi.CreateWindowEx(className)
-	if t.hwnd == 0 {
+	hwnd := winapi.CreateWindowEx(0, className, "PinswitchHotkey", 0, 0, 0, 0, 0, 0, 0, 0, 0)
+	if hwnd == 0 {
 		return
 	}
+	t.hwnd = hwnd
 
-	if !winapi.RegisterHotKey(t.hwnd, 1, 0x0002|0x0004, 0x59) {
-		return
-	}
+	winapi.RegisterHotKey(hwnd, 1, 0x0002|0x0004, 0x59)
 
-	var msg winapi.TagMSG
+	var msg winapi.Msg
 	for {
-		res := winapi.GetMessage(&msg)
-		if res <= 0 {
+		ret := winapi.GetMessage(&msg, 0, 0, 0)
+		if ret == 0 || ret == -1 {
 			break
 		}
 		winapi.TranslateMessage(&msg)
