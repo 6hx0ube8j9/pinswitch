@@ -95,10 +95,10 @@ func (t *TrayUI) StartHotkeyListener() {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	className := "PinswitchHotkeyWindow"
+	className := "PinswitchHotkeyWindow_Unique_Class"
 	winapi.RegisterClass(className, func(hwnd uintptr, msg uint32, wparam uintptr, lparam uintptr) uintptr {
 		switch msg {
-		case 0x0312: // WM_HOTKEY
+		case 0x0312:
 			if wparam == 1 {
 				current := t.engine.GetIMEMode()
 				if t.engine.SetIMEMode(1 - current) {
@@ -106,7 +106,10 @@ func (t *TrayUI) StartHotkeyListener() {
 				}
 			}
 			return 0
-		case 0x0002: // WM_DESTROY
+		case 0x0010:
+			systray.Quit()
+			return 0
+		case 0x0002:
 			winapi.UnregisterHotKey(hwnd, 1)
 			winapi.PostQuitMessage(0)
 			return 0
