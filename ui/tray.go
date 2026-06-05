@@ -23,16 +23,17 @@ var iconQuan []byte
 var iconShuang []byte
 
 type TrayUI struct {
-	engine        *core.SwitchEngine
-	mFullPinyin   *systray.MenuItem
-	mDoublePinyin *systray.MenuItem
-	mAutoStart    *systray.MenuItem
-	hwnd          uintptr
-	ctx           context.Context
-	cancel        context.CancelFunc
-	currentMode   uint32
-	lastToggle    time.Time
-	toggleMu      sync.Mutex
+	engine         *core.SwitchEngine
+	mFullPinyin    *systray.MenuItem
+	mDoublePinyin  *systray.MenuItem
+	mAutoStart     *systray.MenuItem
+	hwnd           uintptr
+	ctx            context.Context
+	cancel         context.CancelFunc
+	currentMode    uint32
+	lastToggle     time.Time
+	toggleMu       sync.Mutex
+	isTogglingHide bool
 }
 
 func NewTrayUI(engine *core.SwitchEngine) *TrayUI {
@@ -80,7 +81,6 @@ func (t *TrayUI) onReady() {
 	t.mDoublePinyin = systray.AddMenuItem("双拼输入", "")
 	systray.AddSeparator()
 	t.mAutoStart = systray.AddMenuItem("开机启动", "")
-
 	systray.AddSeparator()
 	mHelp := systray.AddMenuItem("快捷键说明", "")
 	mQuit := systray.AddMenuItem("退出程序", "")
@@ -88,6 +88,7 @@ func (t *TrayUI) onReady() {
 	t.SyncUI()
 
 	go t.StartHotkeyListener()
+
 	go t.engine.WatchRegistry(t.ctx, func() {
 		t.SyncUI()
 	})
@@ -150,6 +151,14 @@ func (t *TrayUI) toggleMode() {
 }
 
 func (t *TrayUI) toggleHide() {
+	t.toggleMu.Lock()
+	if t.isTogglingHide {
+		t.toggleMu.Unlock()
+		return
+	}
+	t.isTogglingHide = true
+	t.toggleMu.Unlock()
+
 	isHidden := t.engine.IsTrayHidden()
 	t.engine.SetTrayHidden(!isHidden)
 
@@ -164,6 +173,8 @@ func (t *TrayUI) toggleHide() {
 
 	if !isHidden {
 		systray.Quit()
+		time.Sleep(300 * time.Millisecond)
+	} else {
 		time.Sleep(100 * time.Millisecond)
 	}
 
