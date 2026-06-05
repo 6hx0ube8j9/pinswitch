@@ -2,6 +2,7 @@ package winapi
 
 import (
 	"syscall"
+	"time"
 	"unsafe"
 )
 
