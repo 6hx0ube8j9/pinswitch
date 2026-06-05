@@ -9,6 +9,16 @@ const (
 	WM_CLOSE  = 0x0010
 	WM_HOTKEY = 0x0312
 	WM_USER   = 0x0400
+	
+	WM_SETTINGCHANGE  = 0x001A
+	WM_IME_CONTROL    = 0x0283
+	IMC_GETOPENSTATUS = 0x0005
+	IMC_SETOPENSTATUS = 0x0006
+	HWND_BROADCAST    = 0xFFFF
+	SMTO_ABORTIFHUNG  = 0x0002
+
+	HotkeyToggleMode = 1
+	HotkeyToggleHide = 2
 )
 
 var (
@@ -198,4 +208,27 @@ func SendMessageTimeout(hwnd uintptr, msg uint32, wParam, lParam uintptr, flags 
 func ImmGetDefaultIMEWnd(hwnd uintptr) uintptr {
 	ret, _, _ := procImmGetDefaultIMEWnd.Call(hwnd)
 	return ret
+}
+
+func RefreshActiveWindowIME() {
+	time.Sleep(50 * time.Millisecond)
+
+	fg := GetForegroundWindow()
+	if fg != 0 {
+		PostMessage(fg, WM_SETTINGCHANGE, 0, 0)
+
+		imeWnd := ImmGetDefaultIMEWnd(fg)
+		if imeWnd != 0 {
+			status := SendMessageTimeout(imeWnd, WM_IME_CONTROL, IMC_GETOPENSTATUS, 0, SMTO_ABORTIFHUNG, 50)
+			
+			if status != 0 {
+				PostMessage(imeWnd, WM_IME_CONTROL, IMC_SETOPENSTATUS, 0)
+				PostMessage(imeWnd, WM_IME_CONTROL, IMC_SETOPENSTATUS, 1)
+			} else {
+				PostMessage(imeWnd, WM_IME_CONTROL, IMC_SETOPENSTATUS, 1)
+				PostMessage(imeWnd, WM_IME_CONTROL, IMC_SETOPENSTATUS, 0)
+			}
+		}
+	}
+	SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0, 0, SMTO_ABORTIFHUNG, 100)
 }
