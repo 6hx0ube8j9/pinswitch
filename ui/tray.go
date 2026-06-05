@@ -76,11 +76,11 @@ func (t *TrayUI) Start() {
 func (t *TrayUI) onReady() {
 	systray.SetTitle("pinswitch")
 
-	t.mFullPinyin = systray.AddMenuItem("全拼模式", "")
-	t.mDoublePinyin = systray.AddMenuItem("双拼模式", "")
+	t.mFullPinyin = systray.AddMenuItem("全拼输入", "")
+	t.mDoublePinyin = systray.AddMenuItem("双拼输入", "")
 	systray.AddSeparator()
 	t.mAutoStart = systray.AddMenuItem("开机启动", "")
-	
+
 	systray.AddSeparator()
 	mHelp := systray.AddMenuItem("快捷键说明", "")
 	mQuit := systray.AddMenuItem("退出程序", "")
@@ -145,7 +145,7 @@ func (t *TrayUI) toggleMode() {
 		if !t.engine.IsTrayHidden() {
 			t.SyncUI()
 		}
-		go winapi.RefreshActiveWindowIME()
+		winapi.AsyncRefreshActiveWindowIME()
 	}
 }
 
@@ -161,7 +161,7 @@ func (t *TrayUI) toggleHide() {
 	exePath, _ := os.Executable()
 	cmd := exec.Command(exePath, "-restart")
 	cmd.Start()
-	
+
 	if !isHidden {
 		systray.Quit()
 		time.Sleep(100 * time.Millisecond)
