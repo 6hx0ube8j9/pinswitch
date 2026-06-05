@@ -43,6 +43,10 @@ func main() {
 				winapi.PostMessage(oldHwnd, winapi.WM_USER+777, 0, 0)
 			}
 		}
+
+		var msg winapi.Msg
+		winapi.PeekMessage(&msg, 0, 0, 0, winapi.PM_REMOVE)
+
 		return
 	} else if ret == 0 {
 		return
