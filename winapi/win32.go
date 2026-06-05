@@ -18,6 +18,9 @@ const (
 	HWND_BROADCAST    = 0xFFFF
 	SMTO_ABORTIFHUNG  = 0x0002
 
+	WM_IME_SETCONTEXT = 0x0281
+	PM_REMOVE         = 0x0001
+
 	HotkeyToggleMode = 1
 	HotkeyToggleHide = 2
 )
@@ -47,6 +50,8 @@ var (
 	procSendNotifyMessageW  = user32.NewProc("SendNotifyMessageW")
 	procImmGetDefaultIMEWnd = imm32.NewProc("ImmGetDefaultIMEWnd")
 
+
+	procPeekMessageW = user32.NewProc("PeekMessageW")
 	procCreateMutexW = kernel32.NewProc("CreateMutexW")
 	procCloseHandle  = kernel32.NewProc("CloseHandle")
 )
@@ -79,6 +84,11 @@ var imeRefreshChan = make(chan struct{}, 1)
 
 func init() {
 	go startIMEMonitorLoop()
+}
+
+func PeekMessage(msg *Msg, hwnd uintptr, msgFilterMin, msgFilterMax, removeMsg uint32) bool {
+	ret, _, _ := procPeekMessageW.Call(uintptr(unsafe.Pointer(msg)), hwnd, uintptr(msgFilterMin), uintptr(msgFilterMax), uintptr(removeMsg))
+	return ret != 0
 }
 
 func CreateMutex(name string) (uintptr, error) {
@@ -250,6 +260,8 @@ func startIMEMonitorLoop() {
 		}
 
 		SendMessageTimeout(fg, WM_SETTINGCHANGE, 0, 0, SMTO_ABORTIFHUNG, 50)
+		SendMessageTimeout(fg, WM_IME_SETCONTEXT, 0, 0, SMTO_ABORTIFHUNG, 50)
+		SendMessageTimeout(fg, WM_IME_SETCONTEXT, 1, 0xC000000F, SMTO_ABORTIFHUNG, 50)
 
 		imeWnd := ImmGetDefaultIMEWnd(fg)
 		if imeWnd != 0 {
