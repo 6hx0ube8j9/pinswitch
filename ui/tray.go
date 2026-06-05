@@ -162,23 +162,18 @@ func (t *TrayUI) toggleHide() {
 	isHidden := t.engine.IsTrayHidden()
 	t.engine.SetTrayHidden(!isHidden)
 
-	if t.hwnd != 0 {
-		winapi.DestroyWindow(t.hwnd)
-		t.hwnd = 0
-	}
-
 	exePath, _ := os.Executable()
 	cmd := exec.Command(exePath, "-restart")
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000008}
 	cmd.Start()
 
 	if !isHidden {
 		systray.Quit()
-		time.Sleep(300 * time.Millisecond)
 	} else {
-		time.Sleep(100 * time.Millisecond)
+		if t.hwnd != 0 {
+			winapi.PostMessage(t.hwnd, winapi.WM_CLOSE, 0, 0)
+		}
 	}
-
-	os.Exit(0)
 }
 
 func (t *TrayUI) SyncUI() {
