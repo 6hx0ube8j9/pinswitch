@@ -1,17 +1,17 @@
 package winapi
 
 import (
+	"runtime"
 	"syscall"
 	"time"
 	"unsafe"
 )
 
 const (
-	WM_CLOSE  = 0x0010
-	WM_HOTKEY = 0x0312
-	WM_USER   = 0x0400
-	
+	WM_CLOSE          = 0x0010
 	WM_SETTINGCHANGE  = 0x001A
+	WM_HOTKEY         = 0x0312
+	WM_USER           = 0x0400
 	WM_IME_CONTROL    = 0x0283
 	IMC_GETOPENSTATUS = 0x0005
 	IMC_SETOPENSTATUS = 0x0006
@@ -23,9 +23,9 @@ const (
 )
 
 var (
-	user32               = syscall.NewLazyDLL("user32.dll")
-	kernel32             = syscall.NewLazyDLL("kernel32.dll")
-	imm32                = syscall.NewLazyDLL("imm32.dll")
+	user32   = syscall.NewLazyDLL("user32.dll")
+	kernel32 = syscall.NewLazyDLL("kernel32.dll")
+	imm32    = syscall.NewLazyDLL("imm32.dll")
 
 	procRegisterHotKey      = user32.NewProc("RegisterHotKey")
 	procUnregisterHotKey    = user32.NewProc("UnregisterHotKey")
@@ -42,13 +42,14 @@ var (
 	procGetAsyncKeyState      = user32.NewProc("GetAsyncKeyState")
 	procMessageBoxW         = user32.NewProc("MessageBoxW")
 	procGetForegroundWindow = user32.NewProc("GetForegroundWindow")
-	procSendMessageW        = user32.NewProc("SendMessageW")       
+	procSendMessageW        = user32.NewProc("SendMessageW")
 	procSendMessageTimeoutW = user32.NewProc("SendMessageTimeoutW")
+	procSendNotifyMessageW  = user32.NewProc("SendNotifyMessageW")
 
 	procImmGetDefaultIMEWnd = imm32.NewProc("ImmGetDefaultIMEWnd")
 
-	procCreateMutexW        = kernel32.NewProc("CreateMutexW")
-	procCloseHandle         = kernel32.NewProc("CloseHandle")
+	procCreateMutexW = kernel32.NewProc("CreateMutexW")
+	procCloseHandle  = kernel32.NewProc("CloseHandle")
 )
 
 type Msg struct {
@@ -73,6 +74,12 @@ type WndClassEx struct {
 	LpszMenuName  *uint16
 	LpszClassName *uint16
 	HIconSm       uintptr
+}
+
+var imeRefreshChan = make(chan struct{}, 1)
+
+func init() {
+	go startIMEMonitorLoop()
 }
 
 func CreateMutex(name string) (uintptr, error) {
@@ -206,22 +213,52 @@ func SendMessageTimeout(hwnd uintptr, msg uint32, wParam, lParam uintptr, flags 
 	return result
 }
 
+func SendNotifyMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr) bool {
+	ret, _, _ := procSendNotifyMessageW.Call(hwnd, uintptr(msg), wParam, lParam)
+	return ret != 0
+}
+
 func ImmGetDefaultIMEWnd(hwnd uintptr) uintptr {
 	ret, _, _ := procImmGetDefaultIMEWnd.Call(hwnd)
 	return ret
 }
 
-func RefreshActiveWindowIME() {
-	time.Sleep(50 * time.Millisecond)
+func AsyncRefreshActiveWindowIME() {
+	select {
+	case imeRefreshChan <- struct{}{}:
+	default:
+	}
+}
 
-	fg := GetForegroundWindow()
-	if fg != 0 {
+func startIMEMonitorLoop() {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	for range imeRefreshChan {
+		time.Sleep(150 * time.Millisecond)
+
+		for len(imeRefreshChan) > 0 {
+			<-imeRefreshChan
+		}
+
+		fg := GetForegroundWindow()
+		if fg == 0 {
+			continue
+		}
+
 		PostMessage(fg, WM_SETTINGCHANGE, 0, 0)
 
 		imeWnd := ImmGetDefaultIMEWnd(fg)
 		if imeWnd != 0 {
-			status := SendMessageTimeout(imeWnd, WM_IME_CONTROL, IMC_GETOPENSTATUS, 0, SMTO_ABORTIFHUNG, 50)
-			
+			status := SendMessageTimeout(
+				imeWnd,
+				WM_IME_CONTROL,
+				IMC_GETOPENSTATUS,
+				0,
+				SMTO_ABORTIFHUNG,
+				25,
+			)
+
 			if status != 0 {
 				PostMessage(imeWnd, WM_IME_CONTROL, IMC_SETOPENSTATUS, 0)
 				PostMessage(imeWnd, WM_IME_CONTROL, IMC_SETOPENSTATUS, 1)
@@ -230,6 +267,14 @@ func RefreshActiveWindowIME() {
 				PostMessage(imeWnd, WM_IME_CONTROL, IMC_SETOPENSTATUS, 0)
 			}
 		}
+
+		SendMessageTimeout(
+			HWND_BROADCAST,
+			WM_SETTINGCHANGE,
+			0,
+			0,
+			SMTO_ABORTIFHUNG,
+			25,
+		)
 	}
-	SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0, 0, SMTO_ABORTIFHUNG, 100)
 }
