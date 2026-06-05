@@ -14,22 +14,30 @@ const (
 var (
 	user32               = syscall.NewLazyDLL("user32.dll")
 	kernel32             = syscall.NewLazyDLL("kernel32.dll")
-	procRegisterHotKey   = user32.NewProc("RegisterHotKey")
-	procUnregisterHotKey = user32.NewProc("UnregisterHotKey")
-	procGetMessage       = user32.NewProc("GetMessageW")
-	procTranslateMessage = user32.NewProc("TranslateMessage")
-	procDispatchMessage  = user32.NewProc("DispatchMessageW")
-	procDefWindowProc    = user32.NewProc("DefWindowProcW")
-	procRegisterClassEx  = user32.NewProc("RegisterClassExW")
-	procCreateWindowEx   = user32.NewProc("CreateWindowExW")
-	procDestroyWindow    = user32.NewProc("DestroyWindow")
-	procPostQuitMessage  = user32.NewProc("PostQuitMessage")
-	procFindWindowW      = user32.NewProc("FindWindowW")
-	procPostMessageW     = user32.NewProc("PostMessageW")
-	procGetAsyncKeyState   = user32.NewProc("GetAsyncKeyState")
-	procMessageBoxW      = user32.NewProc("MessageBoxW")
-	procCreateMutexW     = kernel32.NewProc("CreateMutexW")
-	procCloseHandle      = kernel32.NewProc("CloseHandle")
+	imm32                = syscall.NewLazyDLL("imm32.dll")
+
+	procRegisterHotKey      = user32.NewProc("RegisterHotKey")
+	procUnregisterHotKey    = user32.NewProc("UnregisterHotKey")
+	procGetMessage          = user32.NewProc("GetMessageW")
+	procTranslateMessage    = user32.NewProc("TranslateMessage")
+	procDispatchMessage     = user32.NewProc("DispatchMessageW")
+	procDefWindowProc       = user32.NewProc("DefWindowProcW")
+	procRegisterClassEx     = user32.NewProc("RegisterClassExW")
+	procCreateWindowEx      = user32.NewProc("CreateWindowExW")
+	procDestroyWindow       = user32.NewProc("DestroyWindow")
+	procPostQuitMessage     = user32.NewProc("PostQuitMessage")
+	procFindWindowW         = user32.NewProc("FindWindowW")
+	procPostMessageW        = user32.NewProc("PostMessageW")
+	procGetAsyncKeyState      = user32.NewProc("GetAsyncKeyState")
+	procMessageBoxW         = user32.NewProc("MessageBoxW")
+	procGetForegroundWindow = user32.NewProc("GetForegroundWindow")
+	procSendMessageW        = user32.NewProc("SendMessageW")       
+	procSendMessageTimeoutW = user32.NewProc("SendMessageTimeoutW")
+
+	procImmGetDefaultIMEWnd = imm32.NewProc("ImmGetDefaultIMEWnd")
+
+	procCreateMutexW        = kernel32.NewProc("CreateMutexW")
+	procCloseHandle         = kernel32.NewProc("CloseHandle")
 )
 
 type Msg struct {
@@ -161,4 +169,33 @@ func MessageBox(hwnd uintptr, text, caption string, flags uint32) int {
 		uintptr(flags),
 	)
 	return int(ret)
+}
+
+func GetForegroundWindow() uintptr {
+	ret, _, _ := procGetForegroundWindow.Call()
+	return ret
+}
+
+func SendMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
+	ret, _, _ := procSendMessageW.Call(hwnd, uintptr(msg), wParam, lParam)
+	return ret
+}
+
+func SendMessageTimeout(hwnd uintptr, msg uint32, wParam, lParam uintptr, flags uint32, timeout uint32) uintptr {
+	var result uintptr
+	procSendMessageTimeoutW.Call(
+		hwnd,
+		uintptr(msg),
+		wParam,
+		lParam,
+		uintptr(flags),
+		uintptr(timeout),
+		uintptr(unsafe.Pointer(&result)),
+	)
+	return result
+}
+
+func ImmGetDefaultIMEWnd(hwnd uintptr) uintptr {
+	ret, _, _ := procImmGetDefaultIMEWnd.Call(hwnd)
+	return ret
 }
