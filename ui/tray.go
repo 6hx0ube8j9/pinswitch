@@ -136,6 +136,7 @@ func (t *TrayUI) toggleMode() {
 	if time.Since(t.lastToggle) < 200*time.Millisecond {
 		return
 	}
+	
 	t.lastToggle = time.Now()
 
 	current := t.engine.GetIMEMode()
@@ -143,24 +144,30 @@ func (t *TrayUI) toggleMode() {
 		if !t.engine.IsTrayHidden() {
 			t.SyncUI()
 		}
+		go func() {
+			time.Sleep(50 * time.Millisecond)
 
-		fg := winapi.GetForegroundWindow()
-		if fg != 0 {
-			winapi.SendMessage(fg, 0x001A, 0, 0)
-			imeWnd := winapi.ImmGetDefaultIMEWnd(fg)
-			if imeWnd != 0 {
-				status := winapi.SendMessage(imeWnd, 0x0283, 0x0005, 0) 
-				if status != 0 { 
-					winapi.SendMessage(imeWnd, 0x0283, 0x0006, 0) 
-					winapi.SendMessage(imeWnd, 0x0283, 0x0006, 1) 
-				} else {
-					winapi.SendMessage(imeWnd, 0x0283, 0x0006, 1)
-					winapi.SendMessage(imeWnd, 0x0283, 0x0006, 0)
+			fg := winapi.GetForegroundWindow()
+			
+			if fg != 0 {
+				winapi.PostMessage(fg, 0x001A, 0, 0)
+				imeWnd := winapi.ImmGetDefaultIMEWnd(fg)
+				
+				if imeWnd != 0 {
+					status := winapi.SendMessageTimeout(imeWnd, 0x0283, 0x0005, 0, 0x0002, 50)
+					
+					if status != 0 {
+						winapi.PostMessage(imeWnd, 0x0283, 0x0006, 0)
+						winapi.PostMessage(imeWnd, 0x0283, 0x0006, 1)
+					} else {
+						winapi.PostMessage(imeWnd, 0x0283, 0x0006, 1)
+						winapi.PostMessage(imeWnd, 0x0283, 0x0006, 0)
+					}
 				}
 			}
-		}
-		
-		winapi.SendMessageTimeout(0xFFFF, 0x001A, 0, 0, 0x0002, 100)
+			
+			winapi.SendMessageTimeout(0xFFFF, 0x001A, 0, 0, 0x0002, 100)
+		}()
 	}
 }
 
