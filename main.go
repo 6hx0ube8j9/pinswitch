@@ -30,7 +30,7 @@ func main() {
 		ret, err = winapi.CreateMutex("Local\\PinswitchUniqueMutexSecure")
 	}
 
-	if err == syscall.Errno(183) {
+    if err == syscall.Errno(183) {
 		if isRestart {
 			return
 		}
@@ -43,10 +43,14 @@ func main() {
 				winapi.PostMessage(oldHwnd, winapi.WM_USER+777, 0, 0)
 			}
 		}
-
+		
+		winapi.PostQuitMessage(0)
 		var msg winapi.Msg
-		winapi.PeekMessage(&msg, 0, 0, 0, winapi.PM_REMOVE)
-
+		for winapi.GetMessage(&msg, 0, 0, 0) > 0 {
+			winapi.TranslateMessage(&msg)
+			winapi.DispatchMessage(&msg)
+		}
+		
 		return
 	} else if ret == 0 {
 		return
