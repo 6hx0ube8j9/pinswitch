@@ -45,7 +45,6 @@ var (
 	procSendMessageW        = user32.NewProc("SendMessageW")
 	procSendMessageTimeoutW = user32.NewProc("SendMessageTimeoutW")
 	procSendNotifyMessageW  = user32.NewProc("SendNotifyMessageW")
-
 	procImmGetDefaultIMEWnd = imm32.NewProc("ImmGetDefaultIMEWnd")
 
 	procCreateMutexW = kernel32.NewProc("CreateMutexW")
@@ -130,17 +129,20 @@ func DefWindowProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 
 func RegisterClass(className string, wndProc func(hwnd uintptr, msg uint32, wparam uintptr, lparam uintptr) uintptr) {
 	classNamePtr, _ := syscall.UTF16PtrFromString(className)
+
 	wc := WndClassEx{
 		CbSize:        uint32(unsafe.Sizeof(WndClassEx{})),
 		LpfnWndProc:   syscall.NewCallback(wndProc),
 		LpszClassName: classNamePtr,
 	}
+
 	procRegisterClassEx.Call(uintptr(unsafe.Pointer(&wc)))
 }
 
 func CreateWindowEx(dwExStyle uint32, lpClassName, lpWindowName string, dwStyle uint32, x, y, nWidth, nHeight int32, hWndParent, hMenu, hInstance, lpParam uintptr) uintptr {
 	classNamePtr, _ := syscall.UTF16PtrFromString(lpClassName)
 	windowNamePtr, _ := syscall.UTF16PtrFromString(lpWindowName)
+
 	ret, _, _ := procCreateWindowEx.Call(
 		uintptr(dwExStyle),
 		uintptr(unsafe.Pointer(classNamePtr)),
@@ -180,6 +182,7 @@ func GetAsyncKeyState(vKey int) bool {
 func MessageBox(hwnd uintptr, text, caption string, flags uint32) int {
 	textPtr, _ := syscall.UTF16PtrFromString(text)
 	captionPtr, _ := syscall.UTF16PtrFromString(caption)
+
 	ret, _, _ := procMessageBoxW.Call(
 		hwnd,
 		uintptr(unsafe.Pointer(textPtr)),
@@ -235,7 +238,7 @@ func startIMEMonitorLoop() {
 	defer runtime.UnlockOSThread()
 
 	for range imeRefreshChan {
-		time.Sleep(150 * time.Millisecond)
+		time.Sleep(300 * time.Millisecond)
 
 		for len(imeRefreshChan) > 0 {
 			<-imeRefreshChan
@@ -246,7 +249,7 @@ func startIMEMonitorLoop() {
 			continue
 		}
 
-		PostMessage(fg, WM_SETTINGCHANGE, 0, 0)
+		SendMessageTimeout(fg, WM_SETTINGCHANGE, 0, 0, SMTO_ABORTIFHUNG, 50)
 
 		imeWnd := ImmGetDefaultIMEWnd(fg)
 		if imeWnd != 0 {
@@ -256,7 +259,7 @@ func startIMEMonitorLoop() {
 				IMC_GETOPENSTATUS,
 				0,
 				SMTO_ABORTIFHUNG,
-				25,
+				50,
 			)
 
 			if status != 0 {
@@ -267,14 +270,5 @@ func startIMEMonitorLoop() {
 				PostMessage(imeWnd, WM_IME_CONTROL, IMC_SETOPENSTATUS, 0)
 			}
 		}
-
-		SendMessageTimeout(
-			HWND_BROADCAST,
-			WM_SETTINGCHANGE,
-			0,
-			0,
-			SMTO_ABORTIFHUNG,
-			25,
-		)
 	}
 }
