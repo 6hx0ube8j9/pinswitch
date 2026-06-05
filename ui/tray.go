@@ -143,6 +143,24 @@ func (t *TrayUI) toggleMode() {
 		if !t.engine.IsTrayHidden() {
 			t.SyncUI()
 		}
+
+		fg := winapi.GetForegroundWindow()
+		if fg != 0 {
+			winapi.SendMessage(fg, 0x001A, 0, 0)
+			imeWnd := winapi.ImmGetDefaultIMEWnd(fg)
+			if imeWnd != 0 {
+				status := winapi.SendMessage(imeWnd, 0x0283, 0x0005, 0) 
+				if status != 0 { 
+					winapi.SendMessage(imeWnd, 0x0283, 0x0006, 0) 
+					winapi.SendMessage(imeWnd, 0x0283, 0x0006, 1) 
+				} else {
+					winapi.SendMessage(imeWnd, 0x0283, 0x0006, 1)
+					winapi.SendMessage(imeWnd, 0x0283, 0x0006, 0)
+				}
+			}
+		}
+		
+		winapi.SendMessageTimeout(0xFFFF, 0x001A, 0, 0, 0x0002, 100)
 	}
 }
 
