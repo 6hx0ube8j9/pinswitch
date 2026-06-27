@@ -1,0 +1,54 @@
+name: Build pinswitch
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.20'
+          cache: false
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          go mod tidy
+
+      - name: Run go-winres
+        shell: pwsh
+        run: |
+          go install github.com/tc-hib/go-winres@latest
+          $GOBIN = Join-Path (go env GOPATH) "bin"
+          if (Test-Path "icons/app.ico") {
+            & (Join-Path $GOBIN "go-winres.exe") simply --icon icons/app.ico
+          } else {
+            Write-Error "File icons/app.ico not found. Please check the path!"
+            exit 1
+          }
+
+      - name: Build EXE
+        shell: pwsh
+        env:
+          CGO_ENABLED: "0"
+          GOOS: "windows"
+          GOARCH: "386"
+        run: |
+          go build -ldflags="-s -w -H=windowsgui" -o pinswitch.exe .
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pinswitch
+          path: pinswitch.exe
