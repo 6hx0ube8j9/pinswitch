@@ -244,41 +244,22 @@ func AsyncRefreshActiveWindowIME() {
 func startIMEMonitorLoop() {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
+	
+	intlPtr, _ := syscall.UTF16PtrFromString("Control Panel\\International")
 
 	for range imeRefreshChan {
-		time.Sleep(300 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 
 		for len(imeRefreshChan) > 0 {
 			<-imeRefreshChan
 		}
 
 		fg := GetForegroundWindow()
-		if fg == 0 {
-			continue
+
+		if fg != 0 {
+			SendMessageTimeout(fg, WM_SETTINGCHANGE, 0, uintptr(unsafe.Pointer(intlPtr)), SMTO_ABORTIFHUNG, 100)
 		}
 
-		SendMessageTimeout(fg, WM_SETTINGCHANGE, 0, 0, SMTO_ABORTIFHUNG, 50)
-		SendMessageTimeout(fg, WM_IME_SETCONTEXT, 0, 0, SMTO_ABORTIFHUNG, 50)
-		SendMessageTimeout(fg, WM_IME_SETCONTEXT, 1, 0xC000000F, SMTO_ABORTIFHUNG, 50)
-
-		imeWnd := ImmGetDefaultIMEWnd(fg)
-		if imeWnd != 0 {
-			status := SendMessageTimeout(
-				imeWnd,
-				WM_IME_CONTROL,
-				IMC_GETOPENSTATUS,
-				0,
-				SMTO_ABORTIFHUNG,
-				50,
-			)
-
-			if status != 0 {
-				PostMessage(imeWnd, WM_IME_CONTROL, IMC_SETOPENSTATUS, 0)
-				PostMessage(imeWnd, WM_IME_CONTROL, IMC_SETOPENSTATUS, 1)
-			} else {
-				PostMessage(imeWnd, WM_IME_CONTROL, IMC_SETOPENSTATUS, 1)
-				PostMessage(imeWnd, WM_IME_CONTROL, IMC_SETOPENSTATUS, 0)
-			}
-		}
+		SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0, uintptr(unsafe.Pointer(intlPtr)), SMTO_ABORTIFHUNG, 100)
 	}
 }
