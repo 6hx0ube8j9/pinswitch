@@ -306,7 +306,7 @@ func main() {
 			return
 		}
 
-		oldHwnd := FindMessageWindow("PinswitchHotkeyWindow_Unique_Class")
+		oldHwnd := FindWindow("PinswitchHotkeyWindow_Unique_Class")
 		if oldHwnd != 0 {
 			if GetAsyncKeyState(0x10) {
 				PostMessage(oldHwnd, WM_USER+778, 0, 0)
