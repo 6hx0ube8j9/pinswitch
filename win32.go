@@ -17,21 +17,23 @@ var (
 	kernel32 = syscall.NewLazyDLL("kernel32.dll")
 	imm32    = syscall.NewLazyDLL("imm32.dll")
 
-	procRegisterHotKey      = user32.NewProc("RegisterHotKey")
-	procUnregisterHotKey    = user32.NewProc("UnregisterHotKey")
-	procGetMessage          = user32.NewProc("GetMessageW")
-	procTranslateMessage    = user32.NewProc("TranslateMessage")
-	procDispatchMessage     = user32.NewProc("DispatchMessageW")
-	procDefWindowProc       = user32.NewProc("DefWindowProcW")
-	procRegisterClassEx     = user32.NewProc("RegisterClassExW")
-	procCreateWindowEx      = user32.NewProc("CreateWindowExW")
-	procDestroyWindow       = user32.NewProc("DestroyWindow")
-	procPostQuitMessage     = user32.NewProc("PostQuitMessage")
-	procFindWindowExW       = user32.NewProc("FindWindowExW")
-	procPostMessageW        = user32.NewProc("PostMessageW")
-	procGetAsyncKeyState    = user32.NewProc("GetAsyncKeyState")
-	procImmAssociateContext = imm32.NewProc("ImmAssociateContext")
-	procMessageBoxW         = user32.NewProc("MessageBoxW")
+	procRegisterHotKey        = user32.NewProc("RegisterHotKey")
+	procUnregisterHotKey      = user32.NewProc("UnregisterHotKey")
+	procGetMessage            = user32.NewProc("GetMessageW")
+	procTranslateMessage      = user32.NewProc("TranslateMessage")
+	procDispatchMessage       = user32.NewProc("DispatchMessageW")
+	procDefWindowProc         = user32.NewProc("DefWindowProcW")
+	procRegisterClassEx       = user32.NewProc("RegisterClassExW")
+	procCreateWindowEx        = user32.NewProc("CreateWindowExW")
+	procDestroyWindow         = user32.NewProc("DestroyWindow")
+	procPostQuitMessage       = user32.NewProc("PostQuitMessage")
+	procFindWindowExW         = user32.NewProc("FindWindowExW")
+	procPostMessageW          = user32.NewProc("PostMessageW")
+	procGetAsyncKeyState     = user32.NewProc("GetAsyncKeyState")
+	procImmAssociateContext   = imm32.NewProc("ImmAssociateContext")
+	procGetForegroundWindow   = user32.NewProc("GetForegroundWindow")
+	procSendMessageTimeoutW   = user32.NewProc("SendMessageTimeoutW")
+	procMessageBoxW           = user32.NewProc("MessageBoxW")
 
 	procCreateMutexW = kernel32.NewProc("CreateMutexW")
 	procCloseHandle  = kernel32.NewProc("CloseHandle")
@@ -59,6 +61,25 @@ type WndClassEx struct {
 	LpszMenuName  *uint16
 	LpszClassName *uint16
 	HIconSm       uintptr
+}
+
+func AsyncRefreshActiveWindowIME() {
+	go func() {
+		fg, _, _ := procGetForegroundWindow.Call()
+		if fg != 0 {
+			var dwResult uintptr
+			strPtr, _ := syscall.UTF16PtrFromString("Control Panel\\Input Method")
+			procSendMessageTimeoutW.Call(
+				fg,
+				0x001A,
+				0,
+				uintptr(unsafe.Pointer(strPtr)),
+				0x0002,
+				50, 
+				uintptr(unsafe.Pointer(&dwResult)),
+			)
+		}
+	}()
 }
 
 func CreateMutex(name string) (uintptr, error) {
@@ -153,7 +174,7 @@ func GetAsyncKeyState(vKey int) bool {
 	return int16(ret) < 0
 }
 
-func FindMessageWindow(className string) uintptr {
+func FindWindow(className string) uintptr {
 	classNamePtr, _ := syscall.UTF16PtrFromString(className)
 	const HWND_MESSAGE = ^uintptr(2)
 	ret, _, _ := procFindWindowExW.Call(HWND_MESSAGE, 0, uintptr(unsafe.Pointer(classNamePtr)), 0)
