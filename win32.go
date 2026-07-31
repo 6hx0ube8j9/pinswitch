@@ -48,6 +48,8 @@ var (
 	procSendMessageTimeoutW = user32.NewProc("SendMessageTimeoutW")
 	procSendNotifyMessageW  = user32.NewProc("SendNotifyMessageW")
 	procImmGetDefaultIMEWnd = imm32.NewProc("ImmGetDefaultIMEWnd")
+    procFindWindowExW        = user32.NewProc("FindWindowExW")
+    procImmAssociateContext  = imm32.NewProc("ImmAssociateContext")
 
 	procPeekMessageW = user32.NewProc("PeekMessageW")
 	procCreateMutexW = kernel32.NewProc("CreateMutexW")
@@ -241,25 +243,40 @@ func AsyncRefreshActiveWindowIME() {
 	}
 }
 
+func FindMessageWindow(className string) uintptr {
+	classNamePtr, _ := syscall.UTF16PtrFromString(className)
+	const HWND_MESSAGE = ^uintptr(2) // HWND_MESSAGE = (HWND)-3
+	ret, _, _ := procFindWindowExW.Call(HWND_MESSAGE, 0, uintptr(unsafe.Pointer(classNamePtr)), 0)
+	return ret
+}
+
+func ImmAssociateContext(hwnd, himc uintptr) uintptr {
+	ret, _, _ := procImmAssociateContext.Call(hwnd, himc)
+	return ret
+}
+
 func startIMEMonitorLoop() {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
-	
+
 	intlPtr, _ := syscall.UTF16PtrFromString("Control Panel\\International")
 
 	for range imeRefreshChan {
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 
 		for len(imeRefreshChan) > 0 {
 			<-imeRefreshChan
 		}
 
 		fg := GetForegroundWindow()
-
 		if fg != 0 {
 			SendMessageTimeout(fg, WM_SETTINGCHANGE, 0, uintptr(unsafe.Pointer(intlPtr)), SMTO_ABORTIFHUNG, 100)
+			
+			imeWnd := ImmGetDefaultIMEWnd(fg)
+			if imeWnd != 0 {
+				SendMessageTimeout(imeWnd, WM_SETTINGCHANGE, 0, uintptr(unsafe.Pointer(intlPtr)), SMTO_ABORTIFHUNG, 100)
+			}
 		}
-
-		SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0, uintptr(unsafe.Pointer(intlPtr)), SMTO_ABORTIFHUNG, 100)
 	}
 }
+
