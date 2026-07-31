@@ -29,8 +29,9 @@ var (
 	procPostQuitMessage     = user32.NewProc("PostQuitMessage")
 	procFindWindowExW       = user32.NewProc("FindWindowExW")
 	procPostMessageW        = user32.NewProc("PostMessageW")
-	procGetAsyncKeyState   = user32.NewProc("GetAsyncKeyState")
+	procGetAsyncKeyState    = user32.NewProc("GetAsyncKeyState")
 	procImmAssociateContext = imm32.NewProc("ImmAssociateContext")
+	procMessageBoxW         = user32.NewProc("MessageBoxW")
 
 	procCreateMutexW = kernel32.NewProc("CreateMutexW")
 	procCloseHandle  = kernel32.NewProc("CloseHandle")
@@ -162,4 +163,16 @@ func FindMessageWindow(className string) uintptr {
 func ImmAssociateContext(hwnd, himc uintptr) uintptr {
 	ret, _, _ := procImmAssociateContext.Call(hwnd, himc)
 	return ret
+}
+
+func MessageBox(hwnd uintptr, text, caption string, boxtype uint32) int {
+	textPtr, _ := syscall.UTF16PtrFromString(text)
+	captionPtr, _ := syscall.UTF16PtrFromString(caption)
+	ret, _, _ := procMessageBoxW.Call(
+		hwnd,
+		uintptr(unsafe.Pointer(textPtr)),
+		uintptr(unsafe.Pointer(captionPtr)),
+		uintptr(boxtype),
+	)
+	return int(ret)
 }
