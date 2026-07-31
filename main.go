@@ -27,6 +27,7 @@ const (
 	HotkeyToggleMode = 1
 	HotkeyToggleHide = 2
 
+	WM_HOTKEY            = 0x0312
 	WM_POWERBROADCAST    = 0x0218
 	PBT_APMRESUMESUSPEND = 0x0007
 )
