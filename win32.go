@@ -8,8 +8,9 @@ import (
 )
 
 const (
-	WM_CLOSE = 0x0010
-	WM_USER  = 0x0400
+	WM_CLOSE  = 0x0010
+	WM_HOTKEY = 0x0312
+	WM_USER   = 0x0400
 )
 
 var (
@@ -17,23 +18,23 @@ var (
 	kernel32 = syscall.NewLazyDLL("kernel32.dll")
 	imm32    = syscall.NewLazyDLL("imm32.dll")
 
-	procRegisterHotKey        = user32.NewProc("RegisterHotKey")
-	procUnregisterHotKey      = user32.NewProc("UnregisterHotKey")
-	procGetMessage            = user32.NewProc("GetMessageW")
-	procTranslateMessage      = user32.NewProc("TranslateMessage")
-	procDispatchMessage       = user32.NewProc("DispatchMessageW")
-	procDefWindowProc         = user32.NewProc("DefWindowProcW")
-	procRegisterClassEx       = user32.NewProc("RegisterClassExW")
-	procCreateWindowEx        = user32.NewProc("CreateWindowExW")
-	procDestroyWindow         = user32.NewProc("DestroyWindow")
-	procPostQuitMessage       = user32.NewProc("PostQuitMessage")
-	procFindWindowExW         = user32.NewProc("FindWindowExW")
-	procPostMessageW          = user32.NewProc("PostMessageW")
-	procGetAsyncKeyState     = user32.NewProc("GetAsyncKeyState")
-	procImmAssociateContext   = imm32.NewProc("ImmAssociateContext")
-	procGetForegroundWindow   = user32.NewProc("GetForegroundWindow")
-	procSendMessageTimeoutW   = user32.NewProc("SendMessageTimeoutW")
-	procMessageBoxW           = user32.NewProc("MessageBoxW")
+	procRegisterHotKey      = user32.NewProc("RegisterHotKey")
+	procUnregisterHotKey    = user32.NewProc("UnregisterHotKey")
+	procGetMessage          = user32.NewProc("GetMessageW")
+	procTranslateMessage    = user32.NewProc("TranslateMessage")
+	procDispatchMessage     = user32.NewProc("DispatchMessageW")
+	procDefWindowProc       = user32.NewProc("DefWindowProcW")
+	procRegisterClassEx     = user32.NewProc("RegisterClassExW")
+	procCreateWindowEx      = user32.NewProc("CreateWindowExW")
+	procDestroyWindow       = user32.NewProc("DestroyWindow")
+	procPostQuitMessage     = user32.NewProc("PostQuitMessage")
+	procFindWindowExW       = user32.NewProc("FindWindowExW")
+	procPostMessageW        = user32.NewProc("PostMessageW")
+	procGetAsyncKeyState   = user32.NewProc("GetAsyncKeyState")
+	procImmAssociateContext = imm32.NewProc("ImmAssociateContext")
+	procGetForegroundWindow = user32.NewProc("GetForegroundWindow")
+	procSendMessageTimeoutW = user32.NewProc("SendMessageTimeoutW")
+	procMessageBoxW         = user32.NewProc("MessageBoxW")
 
 	procCreateMutexW = kernel32.NewProc("CreateMutexW")
 	procCloseHandle  = kernel32.NewProc("CloseHandle")
@@ -75,7 +76,7 @@ func AsyncRefreshActiveWindowIME() {
 				0,
 				uintptr(unsafe.Pointer(strPtr)),
 				0x0002,
-				50, 
+				50,
 				uintptr(unsafe.Pointer(&dwResult)),
 			)
 		}
