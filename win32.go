@@ -3,25 +3,13 @@
 package main
 
 import (
-	"runtime"
 	"syscall"
-	"time"
 	"unsafe"
 )
 
 const (
-	WM_CLOSE          = 0x0010
-	WM_SETTINGCHANGE  = 0x001A
-	WM_HOTKEY         = 0x0312
-	WM_USER           = 0x0400
-	WM_IME_CONTROL    = 0x0283
-	IMC_GETOPENSTATUS = 0x0005
-	IMC_SETOPENSTATUS = 0x0006
-	HWND_BROADCAST    = 0xFFFF
-	SMTO_ABORTIFHUNG  = 0x0002
-
-	WM_IME_SETCONTEXT = 0x0281
-	PM_REMOVE         = 0x0001
+	WM_CLOSE = 0x0010
+	WM_USER  = 0x0400
 )
 
 var (
@@ -39,19 +27,11 @@ var (
 	procCreateWindowEx      = user32.NewProc("CreateWindowExW")
 	procDestroyWindow       = user32.NewProc("DestroyWindow")
 	procPostQuitMessage     = user32.NewProc("PostQuitMessage")
-	procFindWindowW         = user32.NewProc("FindWindowW")
+	procFindWindowExW       = user32.NewProc("FindWindowExW")
 	procPostMessageW        = user32.NewProc("PostMessageW")
-	procGetAsyncKeyState       = user32.NewProc("GetAsyncKeyState")
-	procMessageBoxW         = user32.NewProc("MessageBoxW")
-	procGetForegroundWindow = user32.NewProc("GetForegroundWindow")
-	procSendMessageW        = user32.NewProc("SendMessageW")
-	procSendMessageTimeoutW = user32.NewProc("SendMessageTimeoutW")
-	procSendNotifyMessageW  = user32.NewProc("SendNotifyMessageW")
-	procImmGetDefaultIMEWnd = imm32.NewProc("ImmGetDefaultIMEWnd")
-    procFindWindowExW        = user32.NewProc("FindWindowExW")
-    procImmAssociateContext  = imm32.NewProc("ImmAssociateContext")
+	procGetAsyncKeyState   = user32.NewProc("GetAsyncKeyState")
+	procImmAssociateContext = imm32.NewProc("ImmAssociateContext")
 
-	procPeekMessageW = user32.NewProc("PeekMessageW")
 	procCreateMutexW = kernel32.NewProc("CreateMutexW")
 	procCloseHandle  = kernel32.NewProc("CloseHandle")
 )
@@ -78,17 +58,6 @@ type WndClassEx struct {
 	LpszMenuName  *uint16
 	LpszClassName *uint16
 	HIconSm       uintptr
-}
-
-var imeRefreshChan = make(chan struct{}, 1)
-
-func init() {
-	go startIMEMonitorLoop()
-}
-
-func PeekMessage(msg *Msg, hwnd uintptr, msgFilterMin, msgFilterMax, removeMsg uint32) bool {
-	ret, _, _ := procPeekMessageW.Call(uintptr(unsafe.Pointer(msg)), hwnd, uintptr(msgFilterMin), uintptr(msgFilterMax), uintptr(removeMsg))
-	return ret != 0
 }
 
 func CreateMutex(name string) (uintptr, error) {
@@ -173,12 +142,6 @@ func PostQuitMessage(exitCode int32) {
 	procPostQuitMessage.Call(uintptr(exitCode))
 }
 
-func FindWindow(className string) uintptr {
-	classNamePtr, _ := syscall.UTF16PtrFromString(className)
-	ret, _, _ := procFindWindowW.Call(uintptr(unsafe.Pointer(classNamePtr)), 0)
-	return ret
-}
-
 func PostMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 	ret, _, _ := procPostMessageW.Call(hwnd, uintptr(msg), wParam, lParam)
 	return ret
@@ -189,63 +152,9 @@ func GetAsyncKeyState(vKey int) bool {
 	return int16(ret) < 0
 }
 
-func MessageBox(hwnd uintptr, text, caption string, flags uint32) int {
-	textPtr, _ := syscall.UTF16PtrFromString(text)
-	captionPtr, _ := syscall.UTF16PtrFromString(caption)
-
-	ret, _, _ := procMessageBoxW.Call(
-		hwnd,
-		uintptr(unsafe.Pointer(textPtr)),
-		uintptr(unsafe.Pointer(captionPtr)),
-		uintptr(flags),
-	)
-	return int(ret)
-}
-
-func GetForegroundWindow() uintptr {
-	ret, _, _ := procGetForegroundWindow.Call()
-	return ret
-}
-
-func SendMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
-	ret, _, _ := procSendMessageW.Call(hwnd, uintptr(msg), wParam, lParam)
-	return ret
-}
-
-func SendMessageTimeout(hwnd uintptr, msg uint32, wParam, lParam uintptr, flags uint32, timeout uint32) uintptr {
-	var result uintptr
-	procSendMessageTimeoutW.Call(
-		hwnd,
-		uintptr(msg),
-		wParam,
-		lParam,
-		uintptr(flags),
-		uintptr(timeout),
-		uintptr(unsafe.Pointer(&result)),
-	)
-	return result
-}
-
-func SendNotifyMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr) bool {
-	ret, _, _ := procSendNotifyMessageW.Call(hwnd, uintptr(msg), wParam, lParam)
-	return ret != 0
-}
-
-func ImmGetDefaultIMEWnd(hwnd uintptr) uintptr {
-	ret, _, _ := procImmGetDefaultIMEWnd.Call(hwnd)
-	return ret
-}
-
-func AsyncRefreshActiveWindowIME() {
-	select {
-	case imeRefreshChan <- struct{}{}:
-	default:
-	}
-}
-
 func FindMessageWindow(className string) uintptr {
 	classNamePtr, _ := syscall.UTF16PtrFromString(className)
-	const HWND_MESSAGE = ^uintptr(2) // HWND_MESSAGE = (HWND)-3
+	const HWND_MESSAGE = ^uintptr(2)
 	ret, _, _ := procFindWindowExW.Call(HWND_MESSAGE, 0, uintptr(unsafe.Pointer(classNamePtr)), 0)
 	return ret
 }
@@ -254,29 +163,3 @@ func ImmAssociateContext(hwnd, himc uintptr) uintptr {
 	ret, _, _ := procImmAssociateContext.Call(hwnd, himc)
 	return ret
 }
-
-func startIMEMonitorLoop() {
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-
-	intlPtr, _ := syscall.UTF16PtrFromString("Control Panel\\International")
-
-	for range imeRefreshChan {
-		time.Sleep(100 * time.Millisecond)
-
-		for len(imeRefreshChan) > 0 {
-			<-imeRefreshChan
-		}
-
-		fg := GetForegroundWindow()
-		if fg != 0 {
-			SendMessageTimeout(fg, WM_SETTINGCHANGE, 0, uintptr(unsafe.Pointer(intlPtr)), SMTO_ABORTIFHUNG, 100)
-			
-			imeWnd := ImmGetDefaultIMEWnd(fg)
-			if imeWnd != 0 {
-				SendMessageTimeout(imeWnd, WM_SETTINGCHANGE, 0, uintptr(unsafe.Pointer(intlPtr)), SMTO_ABORTIFHUNG, 100)
-			}
-		}
-	}
-}
-
