@@ -27,7 +27,6 @@ const (
 	HotkeyToggleMode = 1
 	HotkeyToggleHide = 2
 
-	WM_HOTKEY            = 0x0312
 	WM_POWERBROADCAST    = 0x0218
 	PBT_APMRESUMESUSPEND = 0x0007
 )
@@ -72,7 +71,11 @@ func (b *SwitchBrain) SetIMEMode(mode uint32) bool {
 	defer k.Close()
 
 	err = k.SetDWordValue(RegValInput, mode)
-	return err == nil
+	if err == nil {
+		AsyncRefreshActiveWindowIME()
+		return true
+	}
+	return false
 }
 
 func (b *SwitchBrain) ToggleMode() {
@@ -238,7 +241,7 @@ func (b *SwitchBrain) Close() {
 }
 
 func (b *SwitchBrain) WatchRegistry(ctx context.Context, onChanged func()) {
-	k, err := registry.OpenKey(registry.CURRENT_USER, RegPathInput, registry.QUERY_VALUE)
+	k, err := registry.OpenKey(registry.CURRENT_USER, RegPathInput, registry.NOTIFY)
 	if err != nil {
 		return
 	}
