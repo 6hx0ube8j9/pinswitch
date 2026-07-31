@@ -80,7 +80,7 @@ func (t *TrayUI) onReady() {
 
 	t.mAutoStart.Click(func() {
 		t.brain.ToggleAutoStart()
-		t.SyncUI() 
+		t.SyncUI()
 	})
 
 	mHelp.Click(func() {
