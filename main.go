@@ -198,11 +198,14 @@ func (b *SwitchBrain) StartHotkeyListener() {
 		return DefWindowProc(hwnd, msg, wparam, lparam)
 	})
 
-	hwnd := CreateWindowEx(0, className, "PinswitchHotkey", 0, 0, 0, 0, 0, 0, 0, 0, 0)
+	const HWND_MESSAGE = ^uintptr(2)
+	hwnd := CreateWindowEx(0, className, "PinswitchHotkey", 0, 0, 0, 0, 0, HWND_MESSAGE, 0, 0, 0)
 	if hwnd == 0 {
 		return
 	}
 	b.hwnd = hwnd
+
+	ImmAssociateContext(hwnd, 0)
 
 	RegisterHotKey(hwnd, HotkeyToggleMode, 0x0002|0x0004, 0x59)
 	RegisterHotKey(hwnd, HotkeyToggleHide, 0x0004|0x0002|0x0008, 0x59)
