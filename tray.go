@@ -108,25 +108,23 @@ func (t *TrayUI) onExit() {
 func (t *TrayUI) SyncUI() {
 	mode := t.brain.GetIMEMode()
 
-	if mode == t.currentMode {
-		return
-	}
-	t.currentMode = mode
-
-	if mode == 1 {
-		systray.SetIcon(iconShuang)
-		systray.SetTooltip("当前: 双拼模式")
-		t.mDoublePinyin.Check()
-		t.mDoublePinyin.Disable()
-		t.mFullPinyin.Uncheck()
-		t.mFullPinyin.Enable()
-	} else {
-		systray.SetIcon(iconQuan)
-		systray.SetTooltip("当前: 全拼模式")
-		t.mFullPinyin.Check()
-		t.mFullPinyin.Disable()
-		t.mDoublePinyin.Uncheck()
-		t.mDoublePinyin.Enable()
+	if mode != t.currentMode {
+		t.currentMode = mode
+		if mode == 1 {
+			systray.SetIcon(iconShuang)
+			systray.SetTooltip("当前: 双拼模式")
+			t.mDoublePinyin.Check()
+			t.mDoublePinyin.Disable()
+			t.mFullPinyin.Uncheck()
+			t.mFullPinyin.Enable()
+		} else {
+			systray.SetIcon(iconQuan)
+			systray.SetTooltip("当前: 全拼模式")
+			t.mFullPinyin.Check()
+			t.mFullPinyin.Disable()
+			t.mDoublePinyin.Uncheck()
+			t.mDoublePinyin.Enable()
+		}
 	}
 
 	if t.brain.IsAutoStart() {
