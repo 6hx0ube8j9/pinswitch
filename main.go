@@ -26,6 +26,9 @@ const (
 
 	HotkeyToggleMode = 1
 	HotkeyToggleHide = 2
+
+	WM_POWERBROADCAST    = 0x0218
+	PBT_APMRESUMESUSPEND = 0x0007
 )
 
 type SwitchBrain struct {
@@ -38,7 +41,7 @@ type SwitchBrain struct {
 
 func NewSwitchBrain() *SwitchBrain {
 	return &SwitchBrain{
-		lastToggleHide: time.Now(), 
+		lastToggleHide: time.Now(),
 	}
 }
 
@@ -81,9 +84,7 @@ func (b *SwitchBrain) ToggleMode() {
 	b.lastToggle = time.Now()
 
 	current := b.GetIMEMode()
-	if b.SetIMEMode(1 - current) {
-		AsyncRefreshActiveWindowIME()
-	}
+	b.SetIMEMode(1 - current)
 }
 
 func (b *SwitchBrain) IsAutoStart() bool {
@@ -182,6 +183,14 @@ func (b *SwitchBrain) StartHotkeyListener() {
 				b.ToggleHide()
 			}
 			return 0
+		case WM_POWERBROADCAST:
+			if wparam == PBT_APMRESUMESUSPEND {
+				UnregisterHotKey(hwnd, HotkeyToggleMode)
+				UnregisterHotKey(hwnd, HotkeyToggleHide)
+				RegisterHotKey(hwnd, HotkeyToggleMode, 0x0002|0x0004, 0x59)
+				RegisterHotKey(hwnd, HotkeyToggleHide, 0x0004|0x0002|0x0008, 0x59)
+			}
+			return 0
 		case WM_USER + 777:
 			b.ToggleMode()
 			return 0
@@ -228,7 +237,7 @@ func (b *SwitchBrain) Close() {
 }
 
 func (b *SwitchBrain) WatchRegistry(ctx context.Context, onChanged func()) {
-	k, err := registry.OpenKey(registry.CURRENT_USER, RegPathInput, registry.NOTIFY)
+	k, err := registry.OpenKey(registry.CURRENT_USER, RegPathInput, registry.QUERY_VALUE)
 	if err != nil {
 		return
 	}
@@ -291,22 +300,22 @@ func main() {
 		ret, err = CreateMutex("Local\\PinswitchUniqueMutexSecure")
 	}
 
-   if err == syscall.Errno(183) {
+	if err == syscall.Errno(183) {
 		if isRestart {
 			return
 		}
 
-		oldHwnd := FindWindow("PinswitchHotkeyWindow_Unique_Class")
+		oldHwnd := FindMessageWindow("PinswitchHotkeyWindow_Unique_Class")
 		if oldHwnd != 0 {
-			if GetAsyncKeyState(0x10) { 
+			if GetAsyncKeyState(0x10) {
 				PostMessage(oldHwnd, WM_USER+778, 0, 0)
-			} else { 
+			} else {
 				PostMessage(oldHwnd, WM_USER+777, 0, 0)
 			}
 		}
 
 		return
-		
+
 	} else if ret == 0 {
 		return
 	}
