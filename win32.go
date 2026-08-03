@@ -32,48 +32,18 @@ const (
 
 	// Menu constants
 	MF_STRING    = 0x00000000
-	MF_SEPARATOR = 0x00000800
+	MF_GRAYED    = 0x00000001
 	MF_CHECKED   = 0x00000008
+	MF_SEPARATOR = 0x00000800
 
 	TPM_BOTTOMALIGN = 0x0020
 	TPM_LEFTALIGN   = 0x0000
 	TPM_RIGHTBUTTON = 0x0002
-)
 
-var (
-	user32   = syscall.NewLazyDLL("user32.dll")
-	kernel32 = syscall.NewLazyDLL("kernel32.dll")
-	shell32  = syscall.NewLazyDLL("shell32.dll")
-
-	procRegisterHotKey      = user32.NewProc("RegisterHotKey")
-	procUnregisterHotKey    = user32.NewProc("UnregisterHotKey")
-	procGetMessage          = user32.NewProc("GetMessageW")
-	procTranslateMessage    = user32.NewProc("TranslateMessage")
-	procDispatchMessage     = user32.NewProc("DispatchMessageW")
-	procDefWindowProc       = user32.NewProc("DefWindowProcW")
-	procRegisterClassEx     = user32.NewProc("RegisterClassExW")
-	procCreateWindowEx      = user32.NewProc("CreateWindowExW")
-	procDestroyWindow       = user32.NewProc("DestroyWindow")
-	procPostQuitMessage     = user32.NewProc("PostQuitMessage")
-	procFindWindowExW       = user32.NewProc("FindWindowExW")
-	procPostMessageW        = user32.NewProc("PostMessageW")
-	procGetAsyncKeyState      = user32.NewProc("GetAsyncKeyState")
-	procGetForegroundWindow = user32.NewProc("GetForegroundWindow")
-	procSendMessageTimeoutW = user32.NewProc("SendMessageTimeoutW")
-	procMessageBoxW         = user32.NewProc("MessageBoxW")
-	procLoadIconW           = user32.NewProc("LoadIconW")
-
-	// Menu & Tray Procs
-	procShellNotifyIconW    = shell32.NewProc("Shell_NotifyIconW")
-	procCreatePopupMenu     = user32.NewProc("CreatePopupMenu")
-	procAppendMenuW         = user32.NewProc("AppendMenuW")
-	procTrackPopupMenu      = user32.NewProc("TrackPopupMenu")
-	procGetCursorPos        = user32.NewProc("GetCursorPos")
-	procDestroyMenu         = user32.NewProc("DestroyMenu")
-	procSetForegroundWindow = user32.NewProc("SetForegroundWindow")
-
-	procCreateMutexW = kernel32.NewProc("CreateMutexW")
-	procCloseHandle  = kernel32.NewProc("CloseHandle")
+	// Image loading constants
+	IMAGE_ICON       = 1
+	LR_LOADFROMFILE  = 0x00000010
+	LR_DEFAULTSIZE   = 0x00000040
 )
 
 type Msg struct {
@@ -114,6 +84,40 @@ type NotifyIconData struct {
 	SzTip            [128]uint16
 }
 
+var (
+	user32   = syscall.NewLazyDLL("user32.dll")
+	kernel32 = syscall.NewLazyDLL("kernel32.dll")
+	shell32  = syscall.NewLazyDLL("shell32.dll")
+
+	procRegisterHotKey      = user32.NewProc("RegisterHotKey")
+	procUnregisterHotKey    = user32.NewProc("UnregisterHotKey")
+	procGetMessage          = user32.NewProc("GetMessageW")
+	procTranslateMessage    = user32.NewProc("TranslateMessage")
+	procDispatchMessage     = user32.NewProc("DispatchMessageW")
+	procDefWindowProc       = user32.NewProc("DefWindowProcW")
+	procRegisterClassEx     = user32.NewProc("RegisterClassExW")
+	procCreateWindowEx      = user32.NewProc("CreateWindowExW")
+	procDestroyWindow       = user32.NewProc("DestroyWindow")
+	procPostQuitMessage     = user32.NewProc("PostQuitMessage")
+	procFindWindowExW       = user32.NewProc("FindWindowExW")
+	procPostMessageW        = user32.NewProc("PostMessageW")
+	procGetAsyncKeyState      = user32.NewProc("GetAsyncKeyState")
+	procGetForegroundWindow = user32.NewProc("GetForegroundWindow")
+	procSendMessageTimeoutW = user32.NewProc("SendMessageTimeoutW")
+	procMessageBoxW         = user32.NewProc("MessageBoxW")
+	procLoadImageW          = user32.NewProc("LoadImageW")
+
+	procShellNotifyIconW    = shell32.NewProc("Shell_NotifyIconW")
+	procCreatePopupMenu     = user32.NewProc("CreatePopupMenu")
+	procAppendMenuW         = user32.NewProc("AppendMenuW")
+	procTrackPopupMenu      = user32.NewProc("TrackPopupMenu")
+	procGetCursorPos        = user32.NewProc("GetCursorPos")
+	procDestroyMenu         = user32.NewProc("DestroyMenu")
+	procSetForegroundWindow = user32.NewProc("SetForegroundWindow")
+	procCreateMutexW = kernel32.NewProc("CreateMutexW")
+	procCloseHandle  = kernel32.NewProc("CloseHandle")
+)
+
 var imeRefreshChan = make(chan struct{}, 1)
 
 func init() {
@@ -143,8 +147,6 @@ func startIMEMonitorLoop() {
 		}
 	}
 }
-
-// ----------------- 通用 Win32 API -----------------
 
 func CreateMutex(name string) (uintptr, error) {
 	namePtr, _ := syscall.UTF16PtrFromString(name)
@@ -245,14 +247,14 @@ func MessageBox(hwnd uintptr, text, caption string, boxtype uint32) int {
 	return int(ret)
 }
 
-
 func ShellNotifyIcon(dwMessage uint32, lpData *NotifyIconData) bool {
 	ret, _, _ := procShellNotifyIconW.Call(uintptr(dwMessage), uintptr(unsafe.Pointer(lpData)))
 	return ret != 0
 }
 
-func LoadSystemIcon() uintptr {
-	ret, _, _ := procLoadIconW.Call(0, 32512)
+func LoadIconFromPath(path string) uintptr {
+	pathPtr, _ := syscall.UTF16PtrFromString(path)
+	ret, _, _ := procLoadImageW.Call(0, uintptr(unsafe.Pointer(pathPtr)), IMAGE_ICON, 0, 0, LR_LOADFROMFILE|LR_DEFAULTSIZE)
 	return ret
 }
 
