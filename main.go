@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	"os"
-	"os/exec"
 	"runtime"
 	"sync"
 	"syscall"
@@ -26,9 +25,6 @@ const (
 
 	HotkeyToggleMode = 1
 	HotkeyToggleHide = 2
-
-	WM_POWERBROADCAST    = 0x0218
-	PBT_APMRESUMESUSPEND = 0x0007
 )
 
 type SwitchBrain struct {
@@ -36,7 +32,7 @@ type SwitchBrain struct {
 	lastToggle     time.Time
 	lastToggleHide time.Time
 	toggleMu       sync.Mutex
-	isTogglingHide bool
+	OnTrayToggle   func(hide bool) 
 }
 
 func NewSwitchBrain() *SwitchBrain {
@@ -71,11 +67,7 @@ func (b *SwitchBrain) SetIMEMode(mode uint32) bool {
 	defer k.Close()
 
 	err = k.SetDWordValue(RegValInput, mode)
-	if err == nil {
-		AsyncRefreshActiveWindowIME()
-		return true
-	}
-	return false
+	return err == nil
 }
 
 func (b *SwitchBrain) ToggleMode() {
@@ -88,7 +80,9 @@ func (b *SwitchBrain) ToggleMode() {
 	b.lastToggle = time.Now()
 
 	current := b.GetIMEMode()
-	b.SetIMEMode(1 - current)
+	if b.SetIMEMode(1 - current) {
+		AsyncRefreshActiveWindowIME()
+	}
 }
 
 func (b *SwitchBrain) IsAutoStart() bool {
@@ -147,28 +141,18 @@ func (b *SwitchBrain) SetTrayHidden(hide bool) {
 
 func (b *SwitchBrain) ToggleHide() {
 	b.toggleMu.Lock()
-	if b.isTogglingHide || time.Since(b.lastToggleHide) < 1000*time.Millisecond {
+	if time.Since(b.lastToggleHide) < 500*time.Millisecond {
 		b.toggleMu.Unlock()
 		return
 	}
-	b.isTogglingHide = true
 	b.lastToggleHide = time.Now()
 	b.toggleMu.Unlock()
 
-	isHidden := b.IsTrayHidden()
-	b.SetTrayHidden(!isHidden)
+	isHidden := !b.IsTrayHidden()
+	b.SetTrayHidden(isHidden)
 
-	exePath, _ := os.Executable()
-	cmd := exec.Command(exePath, "-restart")
-	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000008}
-	cmd.Start()
-
-	if !isHidden {
-		systray.Quit()
-	} else {
-		if b.hwnd != 0 {
-			PostMessage(b.hwnd, WM_CLOSE, 0, 0)
-		}
+	if b.OnTrayToggle != nil {
+		b.OnTrayToggle(isHidden)
 	}
 }
 
@@ -187,14 +171,6 @@ func (b *SwitchBrain) StartHotkeyListener() {
 				b.ToggleHide()
 			}
 			return 0
-		case WM_POWERBROADCAST:
-			if wparam == PBT_APMRESUMESUSPEND {
-				UnregisterHotKey(hwnd, HotkeyToggleMode)
-				UnregisterHotKey(hwnd, HotkeyToggleHide)
-				RegisterHotKey(hwnd, HotkeyToggleMode, 0x0002|0x0004, 0x59)
-				RegisterHotKey(hwnd, HotkeyToggleHide, 0x0004|0x0002|0x0008, 0x59)
-			}
-			return 0
 		case WM_USER + 777:
 			b.ToggleMode()
 			return 0
@@ -211,17 +187,19 @@ func (b *SwitchBrain) StartHotkeyListener() {
 		return DefWindowProc(hwnd, msg, wparam, lparam)
 	})
 
-	const HWND_MESSAGE = ^uintptr(2)
-	hwnd := CreateWindowEx(0, className, "PinswitchHotkey", 0, 0, 0, 0, 0, HWND_MESSAGE, 0, 0, 0)
+	hwnd := CreateWindowEx(0, className, "PinswitchHotkey", 0, 0, 0, 0, 0, ^uintptr(2), 0, 0, 0)
 	if hwnd == 0 {
 		return
 	}
 	b.hwnd = hwnd
 
-	ImmAssociateContext(hwnd, 0)
-
-	RegisterHotKey(hwnd, HotkeyToggleMode, 0x0002|0x0004, 0x59)
-	RegisterHotKey(hwnd, HotkeyToggleHide, 0x0004|0x0002|0x0008, 0x59)
+	if !RegisterHotKey(hwnd, HotkeyToggleMode, 0x0002|0x0004, 0x59) {
+		MessageBox(0, "切换模式快捷键注册失败，可能被其他程序占用。", "Pinswitch 提示", 0x00000010)
+	}
+	
+	if !RegisterHotKey(hwnd, HotkeyToggleHide, 0x0004|0x0002|0x0008, 0x59) {
+		MessageBox(0, "显示/隐藏快捷键注册失败，可能被其他程序占用。", "Pinswitch 提示", 0x00000010)
+	}
 
 	var msg Msg
 	for {
@@ -245,23 +223,35 @@ func (b *SwitchBrain) WatchRegistry(ctx context.Context, onChanged func()) {
 	if err != nil {
 		return
 	}
-	defer k.Close()
 
 	regEvent, err := windows.CreateEvent(nil, 0, 0, nil)
 	if err != nil {
+		k.Close()
 		return
 	}
-	defer windows.CloseHandle(regEvent)
 
 	quitEvent, err := windows.CreateEvent(nil, 0, 0, nil)
 	if err != nil {
+		windows.CloseHandle(regEvent)
+		k.Close()
 		return
 	}
-	defer windows.CloseHandle(quitEvent)
+
+	watchCtx, cancel := context.WithCancel(ctx)
+	exited := make(chan struct{})
 
 	go func() {
-		<-ctx.Done()
+		<-watchCtx.Done()
 		windows.SetEvent(quitEvent)
+		close(exited)
+	}()
+
+	defer func() {
+		cancel()
+		<-exited
+		windows.CloseHandle(quitEvent)
+		windows.CloseHandle(regEvent)
+		k.Close()
 	}()
 
 	events := []windows.Handle{regEvent, quitEvent}
@@ -287,40 +277,16 @@ func (b *SwitchBrain) WatchRegistry(ctx context.Context, onChanged func()) {
 }
 
 func main() {
-	isRestart := len(os.Args) > 1 && os.Args[1] == "-restart"
-
-	var ret uintptr
-	var err error
-
-	if isRestart {
-		for i := 0; i < 30; i++ {
-			ret, err = CreateMutex("Local\\PinswitchUniqueMutexSecure")
-			if err != syscall.Errno(183) && ret != 0 {
-				break
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
-	} else {
-		ret, err = CreateMutex("Local\\PinswitchUniqueMutexSecure")
-	}
-
-	if err == syscall.Errno(183) {
-		if isRestart {
-			return
-		}
-
+	ret, err := CreateMutex("Local\\PinswitchUniqueMutexSecure")
+	if err == syscall.Errno(183) || ret == 0 {
 		oldHwnd := FindWindow("PinswitchHotkeyWindow_Unique_Class")
 		if oldHwnd != 0 {
-			if GetAsyncKeyState(0x10) {
+			if GetAsyncKeyState(0x10) { 
 				PostMessage(oldHwnd, WM_USER+778, 0, 0)
-			} else {
+			} else { 
 				PostMessage(oldHwnd, WM_USER+777, 0, 0)
 			}
 		}
-
-		return
-
-	} else if ret == 0 {
 		return
 	}
 
@@ -331,12 +297,30 @@ func main() {
 	}()
 
 	brain := NewSwitchBrain()
+	exitChan := make(chan struct{})
 
-	if brain.IsTrayHidden() {
+	go func() {
 		brain.StartHotkeyListener()
-	} else {
-		go brain.StartHotkeyListener()
-		tray := NewTrayUI(brain)
-		tray.Start()
+		close(exitChan)
+	}()
+
+	brain.OnTrayToggle = func(hide bool) {
+		if hide {
+			systray.Quit()
+		} else {
+			go func() {
+				tray := NewTrayUI(brain)
+				tray.Start()
+			}()
+		}
 	}
+
+	if !brain.IsTrayHidden() {
+		go func() {
+			tray := NewTrayUI(brain)
+			tray.Start()
+		}()
+	}
+
+	<-exitChan
 }
