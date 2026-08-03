@@ -330,5 +330,6 @@ func main() {
 	})
 
 	<-exitChan
+	cancel()
 	tray.Close()
 }
