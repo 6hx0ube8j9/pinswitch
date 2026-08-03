@@ -4,8 +4,6 @@ package main
 
 import (
 	_ "embed"
-	"os"
-	"path/filepath"
 	"syscall"
 	"unsafe"
 )
@@ -34,16 +32,26 @@ type TrayUI struct {
 func NewTrayUI(brain *SwitchBrain) *TrayUI {
 	return &TrayUI{
 		brain:       brain,
-		hIconQuan:   loadTempIcon(iconQuan, "pinswitch_quan.ico"),
-		hIconShuang: loadTempIcon(iconShuang, "pinswitch_shuang.ico"),
+		hIconQuan:   HICONFromICOBytes(iconQuan),
+		hIconShuang: HICONFromICOBytes(iconShuang),
 		isVisible:   false,
 	}
 }
 
-func loadTempIcon(b []byte, name string) uintptr {
-	path := filepath.Join(os.TempDir(), name)
-	_ = os.WriteFile(path, b, 0644)
-	return LoadIconFromPath(path)
+func (t *TrayUI) Close() {
+	if t.isVisible {
+		nid := t.getNotifyData()
+		ShellNotifyIcon(NIM_DELETE, &nid)
+		t.isVisible = false
+	}
+	if t.hIconQuan != 0 {
+		DestroyIcon(t.hIconQuan)
+		t.hIconQuan = 0
+	}
+	if t.hIconShuang != 0 {
+		DestroyIcon(t.hIconShuang)
+		t.hIconShuang = 0
+	}
 }
 
 func (t *TrayUI) Show() {
@@ -89,13 +97,20 @@ func (t *TrayUI) getNotifyData() NotifyIconData {
 		nid.HIcon = t.hIconShuang
 	}
 
-	copy(nid.SzTip[:], syscall.StringToUTF16(tip))
+	tip16, _ := syscall.UTF16FromString(tip)
+	if len(tip16) > 128 {
+		tip16 = tip16[:128]
+		tip16[127] = 0
+	}
+	copy(nid.SzTip[:], tip16)
+
 	return nid
 }
 
 func (t *TrayUI) ShowMenu() {
 	SetForegroundWindow(t.brain.hwnd)
 	hMenu := CreatePopupMenu()
+	defer DestroyMenu(hMenu)
 
 	mode := t.brain.GetIMEMode()
 	quanFlag := uint32(MF_STRING)
@@ -122,7 +137,6 @@ func (t *TrayUI) ShowMenu() {
 	pt := GetCursorPos()
 	TrackPopupMenu(hMenu, TPM_BOTTOMALIGN|TPM_LEFTALIGN|TPM_RIGHTBUTTON, pt.X, pt.Y, 0, t.brain.hwnd, 0)
 	PostMessage(t.brain.hwnd, WM_USER, 0, 0)
-	DestroyMenu(hMenu)
 }
 
 func (t *TrayUI) HandleMenuClick(cmdID int) {
@@ -140,7 +154,7 @@ func (t *TrayUI) HandleMenuClick(cmdID int) {
 			"Shift+Ctrl+Y：切换全拼/双拼\n" +
 			"Shift+Ctrl+Win+Y：显示/隐藏托盘图标\n" +
 			"Shift+双击程序：显示/隐藏托盘图标"
-		MessageBox(0, helpText, "Pinswitch", 0x00000040)
+		MessageBox(t.brain.hwnd, helpText, "Pinswitch", 0x00000040)
 	case MenuIDExit:
 		PostMessage(t.brain.hwnd, WM_CLOSE, 0, 0)
 	}
