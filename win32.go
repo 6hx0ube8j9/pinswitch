@@ -4,19 +4,22 @@ package main
 
 import (
 	"syscall"
+	"time"
 	"unsafe"
 )
 
 const (
-	WM_CLOSE  = 0x0010
-	WM_HOTKEY = 0x0312
-	WM_USER   = 0x0400
+	WM_CLOSE         = 0x0010
+	WM_HOTKEY        = 0x0312
+	WM_USER          = 0x0400
+	WM_SETTINGCHANGE = 0x001A
+	SMTO_ABORTIFHUNG = 0x0002
+	HWND_MESSAGE = ^uintptr(2)
 )
 
 var (
 	user32   = syscall.NewLazyDLL("user32.dll")
 	kernel32 = syscall.NewLazyDLL("kernel32.dll")
-	imm32    = syscall.NewLazyDLL("imm32.dll")
 
 	procRegisterHotKey      = user32.NewProc("RegisterHotKey")
 	procUnregisterHotKey    = user32.NewProc("UnregisterHotKey")
@@ -30,8 +33,7 @@ var (
 	procPostQuitMessage     = user32.NewProc("PostQuitMessage")
 	procFindWindowExW       = user32.NewProc("FindWindowExW")
 	procPostMessageW        = user32.NewProc("PostMessageW")
-	procGetAsyncKeyState   = user32.NewProc("GetAsyncKeyState")
-	procImmAssociateContext = imm32.NewProc("ImmAssociateContext")
+	procGetAsyncKeyState      = user32.NewProc("GetAsyncKeyState")
 	procGetForegroundWindow = user32.NewProc("GetForegroundWindow")
 	procSendMessageTimeoutW = user32.NewProc("SendMessageTimeoutW")
 	procMessageBoxW         = user32.NewProc("MessageBoxW")
@@ -64,23 +66,42 @@ type WndClassEx struct {
 	HIconSm       uintptr
 }
 
+var imeRefreshChan = make(chan struct{}, 1)
+
+func init() {
+	go startIMEMonitorLoop()
+}
+
 func AsyncRefreshActiveWindowIME() {
-	go func() {
+	select {
+	case imeRefreshChan <- struct{}{}:
+	default:
+	}
+}
+
+func startIMEMonitorLoop() {
+	for range imeRefreshChan {
+		time.Sleep(300 * time.Millisecond)
+
+		for len(imeRefreshChan) > 0 {
+			<-imeRefreshChan
+		}
+
 		fg, _, _ := procGetForegroundWindow.Call()
 		if fg != 0 {
 			var dwResult uintptr
 			strPtr, _ := syscall.UTF16PtrFromString("Control Panel\\Input Method")
 			procSendMessageTimeoutW.Call(
 				fg,
-				0x001A,
+				WM_SETTINGCHANGE,
 				0,
 				uintptr(unsafe.Pointer(strPtr)),
-				0x0002,
+				SMTO_ABORTIFHUNG,
 				50,
 				uintptr(unsafe.Pointer(&dwResult)),
 			)
 		}
-	}()
+	}
 }
 
 func CreateMutex(name string) (uintptr, error) {
@@ -177,13 +198,7 @@ func GetAsyncKeyState(vKey int) bool {
 
 func FindWindow(className string) uintptr {
 	classNamePtr, _ := syscall.UTF16PtrFromString(className)
-	const HWND_MESSAGE = ^uintptr(2)
 	ret, _, _ := procFindWindowExW.Call(HWND_MESSAGE, 0, uintptr(unsafe.Pointer(classNamePtr)), 0)
-	return ret
-}
-
-func ImmAssociateContext(hwnd, himc uintptr) uintptr {
-	ret, _, _ := procImmAssociateContext.Call(hwnd, himc)
 	return ret
 }
 
