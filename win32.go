@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"syscall"
 	"time"
 	"unsafe"
@@ -20,9 +21,9 @@ const (
 	HWND_MESSAGE     = ^uintptr(2)
 
 	// Tray constants
-	NIM_ADD    = 0x00000000
-	NIM_MODIFY = 0x00000001
-	NIM_DELETE = 0x00000002
+	NIM_ADD     = 0x00000000
+	NIM_MODIFY  = 0x00000001
+	NIM_DELETE  = 0x00000002
 	NIF_MESSAGE = 0x00000001
 	NIF_ICON    = 0x00000002
 	NIF_TIP     = 0x00000004
@@ -41,9 +42,9 @@ const (
 	TPM_RIGHTBUTTON = 0x0002
 
 	// Image loading constants
-	IMAGE_ICON       = 1
-	LR_LOADFROMFILE  = 0x00000010
-	LR_DEFAULTSIZE   = 0x00000040
+	IMAGE_ICON      = 1
+	LR_LOADFROMFILE = 0x00000010
+	LR_DEFAULTSIZE  = 0x00000040
 )
 
 type Msg struct {
@@ -107,15 +108,20 @@ var (
 	procMessageBoxW         = user32.NewProc("MessageBoxW")
 	procLoadImageW          = user32.NewProc("LoadImageW")
 
-	procShellNotifyIconW    = shell32.NewProc("Shell_NotifyIconW")
-	procCreatePopupMenu     = user32.NewProc("CreatePopupMenu")
-	procAppendMenuW         = user32.NewProc("AppendMenuW")
-	procTrackPopupMenu      = user32.NewProc("TrackPopupMenu")
-	procGetCursorPos        = user32.NewProc("GetCursorPos")
-	procDestroyMenu         = user32.NewProc("DestroyMenu")
-	procSetForegroundWindow = user32.NewProc("SetForegroundWindow")
+	procShellNotifyIconW         = shell32.NewProc("Shell_NotifyIconW")
+	procCreatePopupMenu          = user32.NewProc("CreatePopupMenu")
+	procAppendMenuW              = user32.NewProc("AppendMenuW")
+	procTrackPopupMenu           = user32.NewProc("TrackPopupMenu")
+	procGetCursorPos             = user32.NewProc("GetCursorPos")
+	procDestroyMenu              = user32.NewProc("DestroyMenu")
+	procSetForegroundWindow      = user32.NewProc("SetForegroundWindow")
+	procCreateIconFromResourceEx = user32.NewProc("CreateIconFromResourceEx")
+	procDestroyIcon              = user32.NewProc("DestroyIcon")
+
 	procCreateMutexW = kernel32.NewProc("CreateMutexW")
 	procCloseHandle  = kernel32.NewProc("CloseHandle")
+
+	globalWndProcCallback uintptr
 )
 
 var imeRefreshChan = make(chan struct{}, 1)
@@ -196,9 +202,12 @@ func DefWindowProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 
 func RegisterClass(className string, wndProc func(hwnd uintptr, msg uint32, wparam uintptr, lparam uintptr) uintptr) {
 	classNamePtr, _ := syscall.UTF16PtrFromString(className)
+	if globalWndProcCallback == 0 {
+		globalWndProcCallback = syscall.NewCallback(wndProc)
+	}
 	wc := WndClassEx{
 		CbSize:        uint32(unsafe.Sizeof(WndClassEx{})),
-		LpfnWndProc:   syscall.NewCallback(wndProc),
+		LpfnWndProc:   globalWndProcCallback,
 		LpszClassName: classNamePtr,
 	}
 	procRegisterClassEx.Call(uintptr(unsafe.Pointer(&wc)))
@@ -284,4 +293,32 @@ func SetForegroundWindow(hwnd uintptr) {
 
 func DestroyMenu(hMenu uintptr) {
 	procDestroyMenu.Call(hMenu)
+}
+
+func HICONFromICOBytes(data []byte) uintptr {
+	if len(data) < 22 {
+		return 0
+	}
+	bytesInRes := binary.LittleEndian.Uint32(data[14:18])
+	imageOffset := binary.LittleEndian.Uint32(data[18:22])
+
+	if uint32(len(data)) < imageOffset+bytesInRes {
+		return 0
+	}
+
+	ret, _, _ := procCreateIconFromResourceEx.Call(
+		uintptr(unsafe.Pointer(&data[imageOffset])),
+		uintptr(bytesInRes),
+		1,          // fIcon = TRUE
+		0x00030000, // dwVersion = 3.0
+		0,          // cxDesired = default
+		0,          // cyDesired = default
+		0,          // LR_DEFAULTCOLOR
+	)
+	return ret
+}
+
+func DestroyIcon(hIcon uintptr) bool {
+	ret, _, _ := procDestroyIcon.Call(hIcon)
+	return ret != 0
 }
