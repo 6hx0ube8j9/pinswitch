@@ -55,9 +55,6 @@ func (t *TrayUI) Close() {
 }
 
 func (t *TrayUI) Show() {
-	if t.isVisible {
-		return
-	}
 	t.isVisible = true
 	t.SyncUI(NIM_ADD)
 }
@@ -76,7 +73,9 @@ func (t *TrayUI) SyncUI(action uint32) {
 		return
 	}
 	nid := t.getNotifyData()
-	ShellNotifyIcon(action, &nid)
+	if !ShellNotifyIcon(action, &nid) && action == NIM_MODIFY {
+		ShellNotifyIcon(NIM_ADD, &nid)
+	}
 }
 
 func (t *TrayUI) getNotifyData() NotifyIconData {
@@ -136,7 +135,7 @@ func (t *TrayUI) ShowMenu() {
 
 	pt := GetCursorPos()
 	TrackPopupMenu(hMenu, TPM_BOTTOMALIGN|TPM_LEFTALIGN|TPM_RIGHTBUTTON, pt.X, pt.Y, 0, t.brain.hwnd, 0)
-	PostMessage(t.brain.hwnd, WM_USER, 0, 0)
+	PostMessage(t.brain.hwnd, WM_NULL, 0, 0)
 }
 
 func (t *TrayUI) HandleMenuClick(cmdID int) {
