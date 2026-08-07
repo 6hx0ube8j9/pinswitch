@@ -67,7 +67,7 @@ type WndClassEx struct {
 	CbWndExtra    int32
 	HInstance     uintptr
 	HIcon         uintptr
-	HCursor       uintptr
+	HCursor        uintptr
 	HbrBackground uintptr
 	LpszMenuName  *uint16
 	LpszClassName *uint16
@@ -89,24 +89,24 @@ var (
 	kernel32 = syscall.NewLazyDLL("kernel32.dll")
 	shell32  = syscall.NewLazyDLL("shell32.dll")
 
-	procRegisterHotKey         = user32.NewProc("RegisterHotKey")
-	procUnregisterHotKey       = user32.NewProc("UnregisterHotKey")
-	procGetMessage             = user32.NewProc("GetMessageW")
-	procTranslateMessage       = user32.NewProc("TranslateMessage")
-	procDispatchMessage        = user32.NewProc("DispatchMessageW")
-	procDefWindowProc          = user32.NewProc("DefWindowProcW")
-	procRegisterClassEx        = user32.NewProc("RegisterClassExW")
-	procCreateWindowEx         = user32.NewProc("CreateWindowExW")
-	procDestroyWindow          = user32.NewProc("DestroyWindow")
-	procPostQuitMessage        = user32.NewProc("PostQuitMessage")
-	procFindWindowExW          = user32.NewProc("FindWindowExW")
-	procPostMessageW           = user32.NewProc("PostMessageW")
-	procGetAsyncKeyState         = user32.NewProc("GetAsyncKeyState")
-	procGetForegroundWindow    = user32.NewProc("GetForegroundWindow")
-	procSendMessageTimeoutW    = user32.NewProc("SendMessageTimeoutW")
-	procRegisterWindowMessageW = user32.NewProc("RegisterWindowMessageW")
-	procGetSystemMetrics       = user32.NewProc("GetSystemMetrics")
-	procMessageBoxW            = user32.NewProc("MessageBoxW")
+	procRegisterHotKey           = user32.NewProc("RegisterHotKey")
+	procUnregisterHotKey         = user32.NewProc("UnregisterHotKey")
+	procGetMessage               = user32.NewProc("GetMessageW")
+	procTranslateMessage         = user32.NewProc("TranslateMessage")
+	procDispatchMessage          = user32.NewProc("DispatchMessageW")
+	procDefWindowProc            = user32.NewProc("DefWindowProcW")
+	procRegisterClassEx          = user32.NewProc("RegisterClassExW")
+	procCreateWindowEx           = user32.NewProc("CreateWindowExW")
+	procDestroyWindow            = user32.NewProc("DestroyWindow")
+	procPostQuitMessage          = user32.NewProc("PostQuitMessage")
+	procFindWindowExW            = user32.NewProc("FindWindowExW")
+	procPostMessageW             = user32.NewProc("PostMessageW")
+	procGetAsyncKeyState           = user32.NewProc("GetAsyncKeyState")
+	procGetForegroundWindow      = user32.NewProc("GetForegroundWindow")
+	procSendMessageTimeoutW      = user32.NewProc("SendMessageTimeoutW")
+	procRegisterWindowMessageW   = user32.NewProc("RegisterWindowMessageW")
+	procGetSystemMetrics         = user32.NewProc("GetSystemMetrics")
+	procMessageBoxW              = user32.NewProc("MessageBoxW")
 
 	procShellNotifyIconW         = shell32.NewProc("Shell_NotifyIconW")
 	procCreatePopupMenu          = user32.NewProc("CreatePopupMenu")
@@ -305,7 +305,7 @@ func HICONFromICOBytes(data []byte) uintptr {
 	if len(data) < 22 {
 		return 0
 	}
-	
+
 	cx, _, _ := procGetSystemMetrics.Call(SM_CXSMICON)
 	cy, _, _ := procGetSystemMetrics.Call(SM_CYSMICON)
 	if cx == 0 {
@@ -338,7 +338,7 @@ func HICONFromICOBytes(data []byte) uintptr {
 			h = 256
 		}
 
-		diff := (w - int(cx)) * (w - int(cx)) + (h - int(cy)) * (h - int(cy))
+		diff := (w-int(cx))*(w-int(cx)) + (h-int(cy))*(h-int(cy))
 		if diff < bestDiff {
 			bestDiff = diff
 			bestIndex = i
@@ -366,11 +366,11 @@ func HICONFromICOBytes(data []byte) uintptr {
 	ret, _, _ := procCreateIconFromResourceEx.Call(
 		uintptr(unsafe.Pointer(&imageData[0])),
 		uintptr(len(imageData)),
-		1,          // fIcon = TRUE
-		0x00030000, // dwVersion = 3.0
-		cx,         // cxDesired
-		cy,         // cyDesired
-		0,          // LR_DEFAULTCOLOR
+		1,
+		0x00030000,
+		cx,
+		cy,
+		0,
 	)
 	return ret
 }
