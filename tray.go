@@ -115,9 +115,9 @@ func (t *TrayUI) ShowMenu() {
 	quanFlag := uint32(MF_STRING)
 	shuangFlag := uint32(MF_STRING)
 	if mode == 0 {
-		quanFlag |= MF_CHECKED | MF_GRAYED
+		quanFlag |= MF_CHECKED
 	} else {
-		shuangFlag |= MF_CHECKED | MF_GRAYED
+		shuangFlag |= MF_CHECKED
 	}
 
 	autoFlag := uint32(MF_STRING)
