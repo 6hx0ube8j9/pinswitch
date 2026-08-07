@@ -138,6 +138,9 @@ func AsyncRefreshActiveWindowIME() {
 }
 
 func startIMEMonitorLoop() {
+	strPtr, _ := syscall.UTF16PtrFromString("Control Panel\\Input Method")
+	strVal := uintptr(unsafe.Pointer(strPtr))
+
 	for range imeRefreshChan {
 		time.Sleep(300 * time.Millisecond)
 		for len(imeRefreshChan) > 0 {
@@ -146,9 +149,8 @@ func startIMEMonitorLoop() {
 		fg, _, _ := procGetForegroundWindow.Call()
 		if fg != 0 {
 			var dwResult uintptr
-			strPtr, _ := syscall.UTF16PtrFromString("Control Panel\\Input Method")
 			procSendMessageTimeoutW.Call(
-				fg, WM_SETTINGCHANGE, 0, uintptr(unsafe.Pointer(strPtr)), SMTO_ABORTIFHUNG, 50, uintptr(unsafe.Pointer(&dwResult)),
+				fg, WM_SETTINGCHANGE, 0, strVal, SMTO_ABORTIFHUNG, 50, uintptr(unsafe.Pointer(&dwResult)),
 			)
 		}
 	}
@@ -175,7 +177,7 @@ func MessageBox(hwnd uintptr, text, caption string, uType uint32) int {
 func CreateMutex(name string) (uintptr, error) {
 	namePtr, _ := syscall.UTF16PtrFromString(name)
 	ret, _, err := procCreateMutexW.Call(0, 0, uintptr(unsafe.Pointer(namePtr)))
-	if ret != 0 && err == syscall.Errno(183) {
+	if ret != 0 && err == syscall.ERROR_ALREADY_EXISTS {
 		return ret, err
 	}
 	if ret == 0 {
@@ -300,20 +302,12 @@ func DestroyMenu(hMenu uintptr) {
 }
 
 func HICONFromICOBytes(data []byte) uintptr {
-	if len(data) < 6 {
+	if len(data) < 22 {
 		return 0
 	}
-
-	reserved := binary.LittleEndian.Uint16(data[0:2])
-	icoType := binary.LittleEndian.Uint16(data[2:4])
-	count := binary.LittleEndian.Uint16(data[4:6])
-
-	if reserved != 0 || icoType != 1 || count == 0 {
-		return 0
-	}
-
-	cx := GetSystemMetrics(SM_CXSMICON)
-	cy := GetSystemMetrics(SM_CYSMICON)
+	
+	cx, _, _ := procGetSystemMetrics.Call(SM_CXSMICON)
+	cy, _, _ := procGetSystemMetrics.Call(SM_CYSMICON)
 	if cx == 0 {
 		cx = 16
 	}
@@ -321,17 +315,22 @@ func HICONFromICOBytes(data []byte) uintptr {
 		cy = 16
 	}
 
-	bestIndex := -1
-	bestDiff := int32(99999)
+	count := binary.LittleEndian.Uint16(data[4:6])
+	if count == 0 {
+		return 0
+	}
+
+	var bestIndex int = -1
+	var bestDiff int = 99999
 
 	for i := 0; i < int(count); i++ {
 		offset := 6 + i*16
 		if offset+16 > len(data) {
-			return 0
+			break
 		}
 
-		w := int32(data[offset])
-		h := int32(data[offset+1])
+		w := int(data[offset])
+		h := int(data[offset+1])
 		if w == 0 {
 			w = 256
 		}
@@ -339,7 +338,7 @@ func HICONFromICOBytes(data []byte) uintptr {
 			h = 256
 		}
 
-		diff := abs32(w-int32(cx)) + abs32(h-int32(cy))
+		diff := (w - int(cx)) * (w - int(cx)) + (h - int(cy)) * (h - int(cy))
 		if diff < bestDiff {
 			bestDiff = diff
 			bestIndex = i
@@ -354,20 +353,24 @@ func HICONFromICOBytes(data []byte) uintptr {
 	bytesInRes := binary.LittleEndian.Uint32(data[entryOffset+8 : entryOffset+12])
 	imageOffset := binary.LittleEndian.Uint32(data[entryOffset+12 : entryOffset+16])
 
-	if uint64(imageOffset)+uint64(bytesInRes) > uint64(len(data)) {
+	if imageOffset+bytesInRes > uint32(len(data)) {
 		return 0
 	}
 
 	imageData := data[imageOffset : imageOffset+bytesInRes]
 
+	if len(imageData) == 0 {
+		return 0
+	}
+
 	ret, _, _ := procCreateIconFromResourceEx.Call(
 		uintptr(unsafe.Pointer(&imageData[0])),
 		uintptr(len(imageData)),
-		1,
-		0x00030000,
-		uintptr(cx),
-		uintptr(cy),
-		0,
+		1,          // fIcon = TRUE
+		0x00030000, // dwVersion = 3.0
+		cx,         // cxDesired
+		cy,         // cyDesired
+		0,          // LR_DEFAULTCOLOR
 	)
 	return ret
 }
