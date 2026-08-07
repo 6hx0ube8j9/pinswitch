@@ -287,7 +287,7 @@ func (b *SwitchBrain) WatchRegistry(ctx context.Context, onChanged func()) {
 
 func main() {
 	ret, err := CreateMutex("Local\\PinswitchUniqueMutexSecure")
-	if err == syscall.Errno(183) || ret == 0 {
+	if err == syscall.ERROR_ALREADY_EXISTS || ret == 0 {
 		oldHwnd := FindWindow("PinswitchHotkeyWindow_Unique_Class")
 		if oldHwnd != 0 {
 			if GetAsyncKeyState(0x10) {
