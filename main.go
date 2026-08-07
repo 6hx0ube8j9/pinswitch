@@ -24,6 +24,9 @@ const (
 
 	HotkeyToggleMode = 1
 	HotkeyToggleHide = 2
+
+	WM_USER_TOGGLE_MODE = WM_USER + 777
+	WM_USER_TOGGLE_HIDE = WM_USER + 778
 )
 
 type SwitchBrain struct {
@@ -31,11 +34,13 @@ type SwitchBrain struct {
 	lastToggle     time.Time
 	lastToggleHide time.Time
 	toggleMu       sync.Mutex
-	OnReady        func()
-	OnTrayToggle   func(hide bool)
-	OnTrayEvent    func(lparam int)
-	OnMenuCommand  func(cmdID int)
-	OnModeChanged  func()
+
+	OnReady         func()
+	OnTrayToggle    func(hide bool)
+	OnTrayEvent     func(lparam int)
+	OnMenuCommand   func(cmdID int)
+	OnModeChanged   func()
+	OnRestoreSystem func()
 }
 
 func NewSwitchBrain() *SwitchBrain {
@@ -67,6 +72,9 @@ func (b *SwitchBrain) SetIMEMode(mode uint32) bool {
 	}
 	defer k.Close()
 	err = k.SetDWordValue(RegValInput, mode)
+	if err == nil && b.OnModeChanged != nil {
+		b.OnModeChanged()
+	}
 	return err == nil
 }
 
@@ -82,9 +90,6 @@ func (b *SwitchBrain) ToggleMode() {
 	current := b.GetIMEMode()
 	if b.SetIMEMode(1 - current) {
 		AsyncRefreshActiveWindowIME()
-		if b.OnModeChanged != nil {
-			b.OnModeChanged()
-		}
 	}
 }
 
@@ -104,12 +109,13 @@ func (b *SwitchBrain) ToggleAutoStart() {
 		return
 	}
 	defer k.Close()
+
 	if b.IsAutoStart() {
-		k.DeleteValue(RegValRun)
+		_ = k.DeleteValue(RegValRun)
 	} else {
 		exePath, err := os.Executable()
 		if err == nil {
-			k.SetStringValue(RegValRun, `"`+exePath+`"`)
+			_ = k.SetStringValue(RegValRun, `"`+exePath+`"`)
 		}
 	}
 }
@@ -130,10 +136,11 @@ func (b *SwitchBrain) SetTrayHidden(hide bool) {
 		return
 	}
 	defer k.Close()
+
 	if hide {
-		k.SetDWordValue(RegValHideTray, 1)
+		_ = k.SetDWordValue(RegValHideTray, 1)
 	} else {
-		k.SetDWordValue(RegValHideTray, 0)
+		_ = k.SetDWordValue(RegValHideTray, 0)
 	}
 }
 
@@ -158,9 +165,26 @@ func (b *SwitchBrain) StartHotkeyListener() {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
+	taskbarMsgID := RegisterWindowMessage("TaskbarCreated")
 	className := "PinswitchHotkeyWindow_Unique_Class"
+
 	RegisterClass(className, func(hwnd uintptr, msg uint32, wparam uintptr, lparam uintptr) uintptr {
+		if taskbarMsgID != 0 && msg == taskbarMsgID {
+			if b.OnRestoreSystem != nil {
+				b.OnRestoreSystem()
+			}
+			return 0
+		}
+
 		switch msg {
+		case WM_POWERBROADCAST:
+			if wparam == PBT_APMRESUMEAUTOMATIC || wparam == PBT_APMRESUMESUSPEND {
+				if b.OnRestoreSystem != nil {
+					b.OnRestoreSystem()
+				}
+			}
+			return 1
+
 		case WM_HOTKEY:
 			switch int(wparam) {
 			case HotkeyToggleMode:
@@ -169,22 +193,27 @@ func (b *SwitchBrain) StartHotkeyListener() {
 				b.ToggleHide()
 			}
 			return 0
+
 		case WM_TRAYICON:
 			if b.OnTrayEvent != nil {
 				b.OnTrayEvent(int(lparam))
 			}
 			return 0
+
 		case WM_COMMAND:
 			if b.OnMenuCommand != nil {
 				b.OnMenuCommand(int(wparam & 0xFFFF))
 			}
 			return 0
-		case WM_USER + 777:
+
+		case WM_USER_TOGGLE_MODE:
 			b.ToggleMode()
 			return 0
-		case WM_USER + 778:
+
+		case WM_USER_TOGGLE_HIDE:
 			b.ToggleHide()
 			return 0
+
 		case WM_CLOSE:
 			UnregisterHotKey(hwnd, HotkeyToggleMode)
 			UnregisterHotKey(hwnd, HotkeyToggleHide)
@@ -195,7 +224,7 @@ func (b *SwitchBrain) StartHotkeyListener() {
 		return DefWindowProc(hwnd, msg, wparam, lparam)
 	})
 
-	hwnd := CreateWindowEx(0, className, "PinswitchHotkey", 0, 0, 0, 0, 0, HWND_MESSAGE, 0, 0, 0)
+	hwnd := CreateWindowEx(0, className, "PinswitchHotkey", 0, 0, 0, 0, 0, 0, 0, 0, 0)
 	if hwnd == 0 {
 		return
 	}
@@ -205,7 +234,7 @@ func (b *SwitchBrain) StartHotkeyListener() {
 		b.OnReady()
 	}
 
-	RegisterHotKey(hwnd, HotkeyToggleMode, 0x0002|0x0004, 0x59)
+	RegisterHotKey(hwnd, HotkeyToggleMode, 0x0004|0x0002, 0x59)
 	RegisterHotKey(hwnd, HotkeyToggleHide, 0x0004|0x0002|0x0008, 0x59)
 
 	var msg Msg
@@ -224,46 +253,33 @@ func (b *SwitchBrain) WatchRegistry(ctx context.Context, onChanged func()) {
 	if err != nil {
 		return
 	}
+	defer k.Close()
+
 	regEvent, err := windows.CreateEvent(nil, 0, 0, nil)
 	if err != nil {
-		k.Close()
 		return
 	}
-	quitEvent, err := windows.CreateEvent(nil, 0, 0, nil)
-	if err != nil {
-		windows.CloseHandle(regEvent)
-		k.Close()
-		return
-	}
+	defer windows.CloseHandle(regEvent)
 
-	watchCtx, cancel := context.WithCancel(ctx)
-	exited := make(chan struct{})
-
-	go func() {
-		<-watchCtx.Done()
-		windows.SetEvent(quitEvent)
-		close(exited)
-	}()
-
-	defer func() {
-		cancel()
-		<-exited
-		windows.CloseHandle(quitEvent)
-		windows.CloseHandle(regEvent)
-		k.Close()
-	}()
-
-	events := []windows.Handle{regEvent, quitEvent}
 	for {
 		err = windows.RegNotifyChangeKeyValue(windows.Handle(k), false, windows.REG_NOTIFY_CHANGE_LAST_SET, regEvent, true)
 		if err != nil {
 			return
 		}
-		s, err := windows.WaitForMultipleObjects(events, false, windows.INFINITE)
-		if err != nil || s == windows.WAIT_OBJECT_0+1 {
+
+		doneChan := make(chan struct{})
+		go func() {
+			s, err := windows.WaitForSingleObject(regEvent, windows.INFINITE)
+			if err == nil && s == windows.WAIT_OBJECT_0 {
+				close(doneChan)
+			}
+		}()
+
+		select {
+		case <-ctx.Done():
+			windows.SetEvent(regEvent)
 			return
-		}
-		if s == windows.WAIT_OBJECT_0 {
+		case <-doneChan:
 			onChanged()
 		}
 	}
@@ -275,10 +291,13 @@ func main() {
 		oldHwnd := FindWindow("PinswitchHotkeyWindow_Unique_Class")
 		if oldHwnd != 0 {
 			if GetAsyncKeyState(0x10) {
-				PostMessage(oldHwnd, WM_USER+778, 0, 0)
+				PostMessage(oldHwnd, WM_USER_TOGGLE_HIDE, 0, 0)
 			} else {
-				PostMessage(oldHwnd, WM_USER+777, 0, 0)
+				PostMessage(oldHwnd, WM_USER_TOGGLE_MODE, 0, 0)
 			}
+		}
+		if ret != 0 {
+			CloseHandle(syscall.Handle(ret))
 		}
 		return
 	}
@@ -316,6 +335,11 @@ func main() {
 	brain.OnModeChanged = func() {
 		tray.SyncUI(NIM_MODIFY)
 	}
+	brain.OnRestoreSystem = func() {
+		if !brain.IsTrayHidden() {
+			tray.Show()
+		}
+	}
 
 	exitChan := make(chan struct{})
 	go func() {
@@ -325,6 +349,7 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
 	go brain.WatchRegistry(ctx, func() {
 		tray.SyncUI(NIM_MODIFY)
 	})
