@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 	"unsafe"
+	"golang.org/x/sys/windows"
 )
 
 const (
@@ -85,9 +86,9 @@ type NotifyIconData struct {
 }
 
 var (
-	user32   = syscall.NewLazyDLL("user32.dll")
-	kernel32 = syscall.NewLazyDLL("kernel32.dll")
-	shell32  = syscall.NewLazyDLL("shell32.dll")
+	user32   = windows.NewLazySystemDLL("user32.dll")
+	kernel32 = windows.NewLazySystemDLL("kernel32.dll")
+	shell32  = windows.NewLazySystemDLL("shell32.dll")
 
 	procRegisterHotKey           = user32.NewProc("RegisterHotKey")
 	procUnregisterHotKey         = user32.NewProc("UnregisterHotKey")
@@ -143,9 +144,15 @@ func startIMEMonitorLoop() {
 
 	for range imeRefreshChan {
 		time.Sleep(300 * time.Millisecond)
-		for len(imeRefreshChan) > 0 {
-			<-imeRefreshChan
+	DRAIN:
+		for {
+			select {
+			case <-imeRefreshChan:
+			default:
+				break DRAIN
+			}
 		}
+		
 		fg, _, _ := procGetForegroundWindow.Call()
 		if fg != 0 {
 			var dwResult uintptr
