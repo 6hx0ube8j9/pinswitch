@@ -142,10 +142,8 @@ func (t *TrayUI) HandleMenuClick(cmdID int) {
 	switch cmdID {
 	case MenuIDFullPinyin:
 		t.brain.SetIMEMode(0)
-		t.SyncUI(NIM_MODIFY)
 	case MenuIDDoublePinyin:
 		t.brain.SetIMEMode(1)
-		t.SyncUI(NIM_MODIFY)
 	case MenuIDAutoStart:
 		t.brain.ToggleAutoStart()
 	case MenuIDHelp:
