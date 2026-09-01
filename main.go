@@ -27,6 +27,7 @@ const (
 
 	WM_USER_TOGGLE_MODE = WM_USER + 777
 	WM_USER_TOGGLE_HIDE = WM_USER + 778
+	WM_USER_SYNC_UI     = WM_USER + 779
 )
 
 type SwitchBrain struct {
@@ -187,6 +188,12 @@ func (b *SwitchBrain) StartHotkeyListener() {
 			}
 			return 1
 
+        case WM_USER_SYNC_UI:
+            if b.OnModeChanged != nil {
+                b.OnModeChanged()
+            }
+            return 0
+			
 		case WM_HOTKEY:
 			switch int(wparam) {
 			case HotkeyToggleMode:
@@ -370,7 +377,9 @@ func main() {
 	defer cancel()
 
 	go brain.WatchRegistry(ctx, func() {
-		tray.SyncUI(NIM_MODIFY)
+		if brain.hwnd != 0 {
+		PostMessage(brain.hwnd, WM_USER_SYNC_UI, 0, 0)
+		}	
 	})
 
 	<-exitChan
