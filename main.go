@@ -42,6 +42,7 @@ type SwitchBrain struct {
 	OnMenuCommand   func(cmdID int)
 	OnModeChanged   func()
 	OnRestoreSystem func()
+	OnBeforeClose   func()
 }
 
 func NewSwitchBrain() *SwitchBrain {
@@ -134,7 +135,7 @@ func (b *SwitchBrain) IsTrayHidden() bool {
 }
 
 func (b *SwitchBrain) SetTrayHidden(hide bool) {
-	k, _, err := registry.CreateKey(registry.CURRENT_USER, RegPathApp, registry.ALL_ACCESS)
+	k, _, err := registry.CreateKey(registry.CURRENT_USER, RegPathApp, registry.SET_VALUE)
 	if err != nil {
 		return
 	}
@@ -222,8 +223,11 @@ func (b *SwitchBrain) StartHotkeyListener() {
 		case WM_USER_TOGGLE_HIDE:
 			b.ToggleHide()
 			return 0
-
-		case WM_CLOSE:
+			
+        case WM_CLOSE:
+			if b.OnBeforeClose != nil {
+				b.OnBeforeClose()
+			}
 			UnregisterHotKey(hwnd, HotkeyToggleMode)
 			UnregisterHotKey(hwnd, HotkeyToggleHide)
 			DestroyWindow(hwnd)
@@ -367,6 +371,10 @@ func main() {
 		}
 	}
 
+	brain.OnBeforeClose = func() {		
+		tray.Close()
+	}	
+	
 	exitChan := make(chan struct{})
 	go func() {
 		brain.StartHotkeyListener()
