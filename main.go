@@ -66,11 +66,13 @@ func (b *SwitchBrain) SetIMEMode(mode uint32) bool {
 	if b.GetIMEMode() == mode {
 		return false
 	}
-	k, err := registry.OpenKey(registry.CURRENT_USER, RegPathInput, registry.SET_VALUE)
+	
+	k, _, err := registry.CreateKey(registry.CURRENT_USER, RegPathInput, registry.SET_VALUE)
 	if err != nil {
 		return false
 	}
 	defer k.Close()
+	
 	err = k.SetDWordValue(RegValInput, mode)
 	if err == nil && b.OnModeChanged != nil {
 		b.OnModeChanged()
@@ -249,39 +251,56 @@ func (b *SwitchBrain) StartHotkeyListener() {
 }
 
 func (b *SwitchBrain) WatchRegistry(ctx context.Context, onChanged func()) {
-	k, err := registry.OpenKey(registry.CURRENT_USER, RegPathInput, registry.NOTIFY)
-	if err != nil {
-		return
-	}
-	defer k.Close()
-
-	regEvent, err := windows.CreateEvent(nil, 0, 0, nil)
-	if err != nil {
-		return
-	}
-	defer windows.CloseHandle(regEvent)
-
 	for {
-		err = windows.RegNotifyChangeKeyValue(windows.Handle(k), false, windows.REG_NOTIFY_CHANGE_LAST_SET, regEvent, true)
-		if err != nil {
-			return
-		}
-
-		doneChan := make(chan struct{})
-		go func() {
-			s, err := windows.WaitForSingleObject(regEvent, windows.INFINITE)
-			if err == nil && s == windows.WAIT_OBJECT_0 {
-				close(doneChan)
-			}
-		}()
-
+		// 如果上下文已取消，安全退出
 		select {
 		case <-ctx.Done():
-			windows.SetEvent(regEvent)
 			return
-		case <-doneChan:
-			onChanged()
+		default:
 		}
+
+		k, err := registry.OpenKey(registry.CURRENT_USER, RegPathInput, registry.NOTIFY)
+		if err != nil {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(2 * time.Second):
+			}
+			continue
+		}
+
+		regEvent, err := windows.CreateEvent(nil, 0, 0, nil)
+		if err != nil {
+			k.Close()
+			continue
+		}
+
+		for {
+			err = windows.RegNotifyChangeKeyValue(windows.Handle(k), false, windows.REG_NOTIFY_CHANGE_LAST_SET, regEvent, true)
+			if err != nil {
+				break
+			}
+
+			doneChan := make(chan struct{})
+			go func() {
+				defer close(doneChan)
+				windows.WaitForSingleObject(regEvent, windows.INFINITE)
+			}()
+
+			select {
+			case <-ctx.Done():
+				windows.SetEvent(regEvent)
+				<-doneChan
+				windows.CloseHandle(regEvent)
+				k.Close()
+				return
+			case <-doneChan:
+				onChanged()
+			}
+		}
+
+		windows.CloseHandle(regEvent)
+		k.Close()
 	}
 }
 
