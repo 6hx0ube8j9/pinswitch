@@ -81,7 +81,7 @@ type NotifyIconData struct {
 	UFlags           uint32
 	UCallbackMessage uint32
 	HIcon            uintptr
-	SzTip            [128]uint16
+	SzTip            [64]uint16
 }
 
 var (
