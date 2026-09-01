@@ -97,9 +97,9 @@ func (t *TrayUI) getNotifyData() NotifyIconData {
 	}
 
 	tip16, _ := syscall.UTF16FromString(tip)
-	if len(tip16) > 128 {
-		tip16 = tip16[:128]
-		tip16[127] = 0
+	if len(tip16) > 64 {
+		tip16 = tip16[:64]
+		tip16[63] = 0 
 	}
 	copy(nid.SzTip[:], tip16)
 
