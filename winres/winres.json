@@ -12,7 +12,7 @@
           "version": "1.0.0.0"
         },
         "description": "PinSwitch Input Method Switcher",
-        "minimum_os": "win7"
+        "minimum_os": "win8"
       }
     }
   },
