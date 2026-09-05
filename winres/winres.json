@@ -25,11 +25,11 @@
         },
         "info": {
           "0000": {
-            "CompanyName": "PinSwitch",
+            "CompanyName": "PinSwitch Project",
             "FileDescription": "PinSwitch Input Method Switcher",
             "FileVersion": "1.0.0.0",
             "InternalName": "pinswitch",
-            "LegalCopyright": "PinSwitch Project"
+            "LegalCopyright": "PinSwitch Project",
             "OriginalFilename": "pinswitch.exe",
             "ProductName": "PinSwitch",
             "ProductVersion": "1.0.0.0"
