@@ -1,0 +1,41 @@
+{
+  "RT_GROUP_ICON": {
+    "APP": {
+      "0000": "../icons/app.ico"
+    }
+  },
+  "RT_MANIFEST": {
+    "#1": {
+      "0000": {
+        "identity": {
+          "name": "pinswitch",
+          "version": "1.0.0.0"
+        },
+        "description": "PinSwitch Input Method Switcher",
+        "minimum_os": "win7"
+      }
+    }
+  },
+  "RT_VERSION": {
+    "#1": {
+      "0000": {
+        "fixed": {
+          "file_version": "1.0.0.0",
+          "product_version": "1.0.0.0"
+        },
+        "info": {
+          "0000": {
+            "CompanyName": "PinSwitch",
+            "FileDescription": "PinSwitch Input Method Switcher",
+            "FileVersion": "1.0.0.0",
+            "InternalName": "pinswitch",
+            "LegalCopyright": "PinSwitch Project"
+            "OriginalFilename": "pinswitch.exe",
+            "ProductName": "PinSwitch",
+            "ProductVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  }
+}
