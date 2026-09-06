@@ -263,7 +263,6 @@ func (b *SwitchBrain) StartHotkeyListener() {
 
 func (b *SwitchBrain) WatchRegistry(ctx context.Context, onChanged func()) {
 	for {
-		// 如果上下文已取消，安全退出
 		select {
 		case <-ctx.Done():
 			return
