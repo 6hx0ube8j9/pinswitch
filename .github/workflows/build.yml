@@ -33,7 +33,6 @@ jobs:
             Write-Error "File icons/app.ico not found. Please check the path!"
             exit 1
           }
-          # 使用免 PATH 配置的 go run 模式，并指定 32位 (386) 目标架构
           go run github.com/tc-hib/go-winres@latest make --arch 386
 
       - name: Build EXE
