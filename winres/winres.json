@@ -6,10 +6,7 @@
   },
   "RT_MANIFEST": {
     "#1": {
-      "0409": {
-        "custom": true,
-        "src": "../main.manifest"
-      }
+      "0409": "../main.manifest"
     }
   },
   "RT_VERSION": {
