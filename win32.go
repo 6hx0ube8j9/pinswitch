@@ -3,48 +3,53 @@
 package main
 
 import (
-	"encoding/binary"
 	"syscall"
 	"time"
 	"unsafe"
+
 	"golang.org/x/sys/windows"
 )
 
 const (
-	WM_NULL            = 0x0000
-	WM_CLOSE           = 0x0010
-	WM_COMMAND         = 0x0111
-	WM_HOTKEY          = 0x0312
-	WM_USER            = 0x0400
-	WM_SETTINGCHANGE   = 0x001A
-	WM_POWERBROADCAST  = 0x0218
-	WM_TRAYICON        = WM_USER + 100
+	WM_NULL           = 0x0000
+	WM_DESTROY        = 0x0002
+	WM_CLOSE          = 0x0010
+	WM_SETTINGCHANGE  = 0x001A
+	WM_TIMER          = 0x0113
+	WM_COMMAND        = 0x0111
+	WM_DISPLAYCHANGE  = 0x007E
+	WM_POWERBROADCAST = 0x0218
+	WM_HOTKEY         = 0x0312
+	WM_USER           = 0x0400
+	WM_TRAYICON       = WM_USER + 100
 
 	PBT_APMRESUMEAUTOMATIC = 0x0012
 	PBT_APMRESUMESUSPEND   = 0x0007
 
-	SMTO_ABORTIFHUNG   = 0x0002
-	SM_CXSMICON        = 49
-	SM_CYSMICON        = 50
+	SMTO_ABORTIFHUNG = 0x0002
+	SM_CXSMICON      = 49
 
-	NIM_ADD            = 0x00000000
-	NIM_MODIFY         = 0x00000001
-	NIM_DELETE         = 0x00000002
-	NIF_MESSAGE        = 0x00000001
-	NIF_ICON           = 0x00000002
-	NIF_TIP            = 0x00000004
+	NIM_ADD     = 0x00000000
+	NIM_MODIFY  = 0x00000001
+	NIM_DELETE  = 0x00000002
+	NIF_MESSAGE = 0x00000001
+	NIF_ICON    = 0x00000002
+	NIF_TIP     = 0x00000004
+	NIF_GUID    = 0x00000020
 
-	WM_LBUTTONUP       = 0x0202
-	WM_RBUTTONUP       = 0x0205
+	IMAGE_ICON      = 1
+	LR_DEFAULTCOLOR = 0x0000
 
-	MF_STRING          = 0x00000000
-	MF_GRAYED          = 0x00000001
-	MF_CHECKED         = 0x00000008
-	MF_SEPARATOR       = 0x00000800
+	WM_LBUTTONUP = 0x0202
+	WM_RBUTTONUP = 0x0205
 
-	TPM_LEFTALIGN      = 0x0000
-	TPM_BOTTOMALIGN    = 0x0020
-	TPM_RIGHTBUTTON    = 0x0002
+	MF_STRING    = 0x00000000
+	MF_CHECKED   = 0x00000008
+	MF_SEPARATOR = 0x00000800
+
+	TPM_LEFTALIGN   = 0x0000
+	TPM_BOTTOMALIGN = 0x0020
+	TPM_RIGHTBUTTON = 0x0002
 )
 
 type Msg struct {
@@ -68,7 +73,7 @@ type WndClassEx struct {
 	CbWndExtra    int32
 	HInstance     uintptr
 	HIcon         uintptr
-	HCursor        uintptr
+	HCursor       uintptr
 	HbrBackground uintptr
 	LpszMenuName  *uint16
 	LpszClassName *uint16
@@ -82,7 +87,15 @@ type NotifyIconData struct {
 	UFlags           uint32
 	UCallbackMessage uint32
 	HIcon            uintptr
-	SzTip            [64]uint16
+	SzTip            [128]uint16
+	DwState          uint32
+	DwStateMask      uint32
+	SzInfo           [256]uint16
+	TimeoutOrVersion uint32
+	SzInfoTitle      [64]uint16
+	DwInfoFlags      uint32
+	GuidItem         windows.GUID
+	HBalloonIcon     uintptr
 }
 
 var (
@@ -90,39 +103,47 @@ var (
 	kernel32 = windows.NewLazySystemDLL("kernel32.dll")
 	shell32  = windows.NewLazySystemDLL("shell32.dll")
 
-	procRegisterHotKey           = user32.NewProc("RegisterHotKey")
-	procUnregisterHotKey         = user32.NewProc("UnregisterHotKey")
-	procGetMessage               = user32.NewProc("GetMessageW")
-	procTranslateMessage         = user32.NewProc("TranslateMessage")
-	procDispatchMessage          = user32.NewProc("DispatchMessageW")
-	procDefWindowProc            = user32.NewProc("DefWindowProcW")
-	procRegisterClassEx          = user32.NewProc("RegisterClassExW")
-	procCreateWindowEx           = user32.NewProc("CreateWindowExW")
-	procDestroyWindow            = user32.NewProc("DestroyWindow")
-	procPostQuitMessage          = user32.NewProc("PostQuitMessage")
-	procFindWindowExW            = user32.NewProc("FindWindowExW")
-	procPostMessageW             = user32.NewProc("PostMessageW")
-	procGetAsyncKeyState           = user32.NewProc("GetAsyncKeyState")
-	procGetForegroundWindow      = user32.NewProc("GetForegroundWindow")
-	procSendMessageTimeoutW      = user32.NewProc("SendMessageTimeoutW")
-	procRegisterWindowMessageW   = user32.NewProc("RegisterWindowMessageW")
-	procGetSystemMetrics         = user32.NewProc("GetSystemMetrics")
-	procMessageBoxW              = user32.NewProc("MessageBoxW")
+	procRegisterHotKey         = user32.NewProc("RegisterHotKey")
+	procUnregisterHotKey       = user32.NewProc("UnregisterHotKey")
+	procGetMessage             = user32.NewProc("GetMessageW")
+	procTranslateMessage       = user32.NewProc("TranslateMessage")
+	procDispatchMessage        = user32.NewProc("DispatchMessageW")
+	procDefWindowProc          = user32.NewProc("DefWindowProcW")
+	procRegisterClassEx        = user32.NewProc("RegisterClassExW")
+	procCreateWindowEx         = user32.NewProc("CreateWindowExW")
+	procDestroyWindow          = user32.NewProc("DestroyWindow")
+	procPostQuitMessage        = user32.NewProc("PostQuitMessage")
+	procFindWindowExW          = user32.NewProc("FindWindowExW")
+	procFindWindowW            = user32.NewProc("FindWindowW")
+	procPostMessageW           = user32.NewProc("PostMessageW")
+	procGetAsyncKeyState         = user32.NewProc("GetAsyncKeyState")
+	procGetForegroundWindow    = user32.NewProc("GetForegroundWindow")
+	procSendMessageTimeoutW    = user32.NewProc("SendMessageTimeoutW")
+	procRegisterWindowMessageW = user32.NewProc("RegisterWindowMessageW")
+	procGetSystemMetrics       = user32.NewProc("GetSystemMetrics")
+	procMessageBoxW            = user32.NewProc("MessageBoxW")
+	procSetTimer               = user32.NewProc("SetTimer")
+	procKillTimer              = user32.NewProc("KillTimer")
 
-	procShellNotifyIconW         = shell32.NewProc("Shell_NotifyIconW")
-	procCreatePopupMenu          = user32.NewProc("CreatePopupMenu")
-	procAppendMenuW              = user32.NewProc("AppendMenuW")
-	procTrackPopupMenu           = user32.NewProc("TrackPopupMenu")
-	procGetCursorPos             = user32.NewProc("GetCursorPos")
-	procDestroyMenu              = user32.NewProc("DestroyMenu")
-	procSetForegroundWindow      = user32.NewProc("SetForegroundWindow")
-	procCreateIconFromResourceEx = user32.NewProc("CreateIconFromResourceEx")
-	procDestroyIcon              = user32.NewProc("DestroyIcon")
+	procGetDpiForWindow        = user32.NewProc("GetDpiForWindow")
+	procGetSystemMetricsForDpi = user32.NewProc("GetSystemMetricsForDpi")
+	procLoadImageW             = user32.NewProc("LoadImageW")
+	procDestroyIcon            = user32.NewProc("DestroyIcon")
 
-	procCreateMutexW = kernel32.NewProc("CreateMutexW")
-	procCloseHandle  = kernel32.NewProc("CloseHandle")
+	procShellNotifyIconW    = shell32.NewProc("Shell_NotifyIconW")
+	procCreatePopupMenu     = user32.NewProc("CreatePopupMenu")
+	procAppendMenuW         = user32.NewProc("AppendMenuW")
+	procTrackPopupMenu      = user32.NewProc("TrackPopupMenu")
+	procGetCursorPos        = user32.NewProc("GetCursorPos")
+	procDestroyMenu         = user32.NewProc("DestroyMenu")
+	procSetForegroundWindow = user32.NewProc("SetForegroundWindow")
+
+	procGetModuleHandleW = kernel32.NewProc("GetModuleHandleW")
+	procCreateMutexW     = kernel32.NewProc("CreateMutexW")
+	procCloseHandle      = kernel32.NewProc("CloseHandle")
 
 	globalWndProcCallback uintptr
+	trayClassName         = syscall.StringToUTF16Ptr("Shell_TrayWnd")
 )
 
 var imeRefreshChan = make(chan struct{}, 1)
@@ -152,7 +173,7 @@ func startIMEMonitorLoop() {
 				break DRAIN
 			}
 		}
-		
+
 		fg, _, _ := procGetForegroundWindow.Call()
 		if fg != 0 {
 			var dwResult uintptr
@@ -163,15 +184,56 @@ func startIMEMonitorLoop() {
 	}
 }
 
+func GetTaskbarSmallIconSize() int {
+	hwnd, _, _ := procFindWindowW.Call(uintptr(unsafe.Pointer(trayClassName)), 0)
+	dpi := uint32(96)
+	if procGetDpiForWindow.Find() == nil && hwnd != 0 {
+		if ret, _, _ := procGetDpiForWindow.Call(hwnd); ret > 0 {
+			dpi = uint32(ret)
+		}
+	}
+
+	if procGetSystemMetricsForDpi.Find() == nil {
+		if size, _, _ := procGetSystemMetricsForDpi.Call(uintptr(SM_CXSMICON), uintptr(dpi)); size > 0 {
+			return int(size)
+		}
+	}
+	return int(16 * dpi / 96)
+}
+
+func LoadIconResource(resID uintptr, targetSize int) uintptr {
+	hInst, _, _ := procGetModuleHandleW.Call(0)
+	hIcon, _, _ := procLoadImageW.Call(
+		hInst,
+		resID,
+		IMAGE_ICON,
+		uintptr(targetSize),
+		uintptr(targetSize),
+		LR_DEFAULTCOLOR,
+	)
+	return hIcon
+}
+
+func DestroyIcon(hIcon uintptr) bool {
+	if hIcon == 0 {
+		return false
+	}
+	ret, _, _ := procDestroyIcon.Call(hIcon)
+	return ret != 0
+}
+
+func SetTimer(hwnd uintptr, idEvent uintptr, uElapse uint32) {
+	procSetTimer.Call(hwnd, idEvent, uintptr(uElapse), 0)
+}
+
+func KillTimer(hwnd uintptr, idEvent uintptr) {
+	procKillTimer.Call(hwnd, idEvent)
+}
+
 func RegisterWindowMessage(name string) uint32 {
 	strPtr, _ := syscall.UTF16PtrFromString(name)
 	ret, _, _ := procRegisterWindowMessageW.Call(uintptr(unsafe.Pointer(strPtr)))
 	return uint32(ret)
-}
-
-func GetSystemMetrics(index int) int {
-	ret, _, _ := procGetSystemMetrics.Call(uintptr(index))
-	return int(ret)
 }
 
 func MessageBox(hwnd uintptr, text, caption string, uType uint32) int {
@@ -306,93 +368,4 @@ func SetForegroundWindow(hwnd uintptr) {
 
 func DestroyMenu(hMenu uintptr) {
 	procDestroyMenu.Call(hMenu)
-}
-
-func HICONFromICOBytes(data []byte) uintptr {
-	if len(data) < 22 {
-		return 0
-	}
-
-	cx, _, _ := procGetSystemMetrics.Call(SM_CXSMICON)
-	cy, _, _ := procGetSystemMetrics.Call(SM_CYSMICON)
-	if cx == 0 {
-		cx = 16
-	}
-	if cy == 0 {
-		cy = 16
-	}
-
-	count := binary.LittleEndian.Uint16(data[4:6])
-	if count == 0 {
-		return 0
-	}
-
-	var bestIndex int = -1
-	var bestDiff int = 99999
-
-	for i := 0; i < int(count); i++ {
-		offset := 6 + i*16
-		if offset+16 > len(data) {
-			break
-		}
-
-		w := int(data[offset])
-		h := int(data[offset+1])
-		if w == 0 {
-			w = 256
-		}
-		if h == 0 {
-			h = 256
-		}
-
-		diff := (w-int(cx))*(w-int(cx)) + (h-int(cy))*(h-int(cy))
-		if diff < bestDiff {
-			bestDiff = diff
-			bestIndex = i
-		}
-	}
-
-	if bestIndex == -1 {
-		return 0
-	}
-
-	entryOffset := 6 + bestIndex*16
-	bytesInRes := binary.LittleEndian.Uint32(data[entryOffset+8 : entryOffset+12])
-	imageOffset := binary.LittleEndian.Uint32(data[entryOffset+12 : entryOffset+16])
-
-	if imageOffset+bytesInRes > uint32(len(data)) {
-		return 0
-	}
-
-	imageData := data[imageOffset : imageOffset+bytesInRes]
-
-	if len(imageData) == 0 {
-		return 0
-	}
-
-	ret, _, _ := procCreateIconFromResourceEx.Call(
-		uintptr(unsafe.Pointer(&imageData[0])),
-		uintptr(len(imageData)),
-		1,
-		0x00030000,
-		cx,
-		cy,
-		0,
-	)
-	return ret
-}
-
-func abs32(n int32) int32 {
-	if n < 0 {
-		return -n
-	}
-	return n
-}
-
-func DestroyIcon(hIcon uintptr) bool {
-	if hIcon == 0 {
-		return false
-	}
-	ret, _, _ := procDestroyIcon.Call(hIcon)
-	return ret != 0
 }
