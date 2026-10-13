@@ -344,13 +344,13 @@ func main() {
 			}
 		}
 		if ret != 0 {
-			CloseHandle(syscall.Handle(ret))
+			windows.CloseHandle(windows.Handle(ret))
 		}
 		return
 	}
 	defer func() {
 		if ret != 0 {
-			CloseHandle(syscall.Handle(ret))
+			windows.CloseHandle(windows.Handle(ret))
 		}
 	}()
 
@@ -380,13 +380,14 @@ func main() {
 		}
 	}
 	brain.OnModeChanged = func() {
-		tray.SyncUI(NIM_MODIFY)
+		tray.SyncUI()
 	}
 	brain.OnDpiCheck = func() {
 		tray.CheckDpiAndRefresh()
 	}
 	brain.OnRestoreSystem = func() {
 		if !brain.IsTrayHidden() {
+			tray.CheckDpiAndRefresh()
 			tray.Show()
 		}
 	}
@@ -411,5 +412,4 @@ func main() {
 
 	<-exitChan
 	cancel()
-	tray.Close()
 }
