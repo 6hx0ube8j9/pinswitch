@@ -3,18 +3,16 @@
 package main
 
 import (
-	_ "embed"
 	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/windows"
 )
 
-//go:embed icons/quan.ico
-var iconQuan []byte
-
-//go:embed icons/shuang.ico
-var iconShuang []byte
-
 const (
+	ResIconQuan   = ICON_QUAN
+	ResIconShuang = ICON_SHUANG
+
 	MenuIDFullPinyin   = 1001
 	MenuIDDoublePinyin = 1002
 	MenuIDAutoStart    = 1003
@@ -22,19 +20,75 @@ const (
 	MenuIDExit         = 1005
 )
 
+var pinswitchTrayGUID = windows.GUID{
+	Data1: 0x5b3c4d2e,
+	Data2: 0x1a2b,
+	Data3: 0x3c4d,
+	Data4: [8]byte{0x5e, 0x6f, 0x7a, 0x8b, 0x9c, 0x0d, 0x1e, 0x2f},
+}
+
 type TrayUI struct {
 	brain       *SwitchBrain
+	currentSize int
 	hIconQuan   uintptr
 	hIconShuang uintptr
 	isVisible   bool
+	useGUID     bool
 }
 
 func NewTrayUI(brain *SwitchBrain) *TrayUI {
-	return &TrayUI{
-		brain:       brain,
-		hIconQuan:   HICONFromICOBytes(iconQuan),
-		hIconShuang: HICONFromICOBytes(iconShuang),
-		isVisible:   false,
+	t := &TrayUI{
+		brain:   brain,
+		useGUID: true,
+	}
+	t.reloadIcons(GetTaskbarSmallIconSize())
+	return t
+}
+
+func (t *TrayUI) reloadIcons(targetSize int) {
+	if targetSize <= 0 {
+		targetSize = 16
+	}
+	if t.currentSize == targetSize && t.hIconQuan != 0 && t.hIconShuang != 0 {
+		return
+	}
+
+	newQuan := LoadIconResource(ResIconQuan, targetSize)
+	newShuang := LoadIconResource(ResIconShuang, targetSize)
+
+	if newQuan == 0 || newShuang == 0 {
+		if newQuan != 0 {
+			DestroyIcon(newQuan)
+		}
+		if newShuang != 0 {
+			DestroyIcon(newShuang)
+		}
+		return
+	}
+
+	oldQuan := t.hIconQuan
+	oldShuang := t.hIconShuang
+
+	t.hIconQuan = newQuan
+	t.hIconShuang = newShuang
+	t.currentSize = targetSize
+
+	if oldQuan != 0 {
+		DestroyIcon(oldQuan)
+	}
+	if oldShuang != 0 {
+		DestroyIcon(oldShuang)
+	}
+}
+
+func (t *TrayUI) CheckDpiAndRefresh() {
+	if !t.isVisible {
+		return
+	}
+	targetSize := GetTaskbarSmallIconSize()
+	if targetSize != t.currentSize {
+		t.reloadIcons(targetSize)
+		t.SyncUI(NIM_MODIFY)
 	}
 }
 
@@ -73,8 +127,17 @@ func (t *TrayUI) SyncUI(action uint32) {
 		return
 	}
 	nid := t.getNotifyData()
-	if !ShellNotifyIcon(action, &nid) && action == NIM_MODIFY {
-		ShellNotifyIcon(NIM_ADD, &nid)
+
+	if !ShellNotifyIcon(action, &nid) {
+		if action == NIM_ADD && t.useGUID {
+			t.useGUID = false
+			nid = t.getNotifyData()
+			ShellNotifyIcon(NIM_ADD, &nid)
+			return
+		}
+		if action == NIM_MODIFY {
+			ShellNotifyIcon(NIM_ADD, &nid)
+		}
 	}
 }
 
@@ -87,6 +150,11 @@ func (t *TrayUI) getNotifyData() NotifyIconData {
 		UCallbackMessage: WM_TRAYICON,
 	}
 
+	if t.useGUID {
+		nid.UFlags |= NIF_GUID
+		nid.GuidItem = pinswitchTrayGUID
+	}
+
 	mode := t.brain.GetIMEMode()
 	tip := "Pinswitch: 全拼模式"
 	nid.HIcon = t.hIconQuan
@@ -97,9 +165,9 @@ func (t *TrayUI) getNotifyData() NotifyIconData {
 	}
 
 	tip16, _ := syscall.UTF16FromString(tip)
-	if len(tip16) > 64 {
-		tip16 = tip16[:64]
-		tip16[63] = 0 
+	if len(tip16) > 128 {
+		tip16 = tip16[:128]
+		tip16[127] = 0
 	}
 	copy(nid.SzTip[:], tip16)
 
