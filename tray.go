@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	ResIconQuan   = ICON_QUAN
-	ResIconShuang = ICON_SHUANG
+	ResIconQuan   = 101
+	ResIconShuang = 102
 
 	MenuIDFullPinyin   = 1001
 	MenuIDDoublePinyin = 1002
