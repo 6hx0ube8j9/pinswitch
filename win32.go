@@ -52,13 +52,12 @@ const (
 
 	VK_SHIFT = 0x10
 
-	MOD_ALT     = 0x0001
 	MOD_CONTROL = 0x0002
 	MOD_SHIFT   = 0x0004
 	MOD_WIN     = 0x0008
 
 	MB_OK              = 0x00000000
-	MB_ICONINFORMATION = 0x00000040	
+	MB_ICONINFORMATION = 0x00000040
 )
 
 type Msg struct {
@@ -128,7 +127,6 @@ var (
 	procGetForegroundWindow    = user32.NewProc("GetForegroundWindow")
 	procSendMessageTimeoutW    = user32.NewProc("SendMessageTimeoutW")
 	procRegisterWindowMessageW = user32.NewProc("RegisterWindowMessageW")
-	procGetSystemMetrics       = user32.NewProc("GetSystemMetrics")
 	procMessageBoxW            = user32.NewProc("MessageBoxW")
 	procSetTimer               = user32.NewProc("SetTimer")
 	procKillTimer              = user32.NewProc("KillTimer")
@@ -151,6 +149,7 @@ var (
 
 	globalWndProcCallback uintptr
 	trayClassName         = syscall.StringToUTF16Ptr("Shell_TrayWnd")
+	imeSettingChangeStr   = syscall.StringToUTF16Ptr("Control Panel\\Input Method")
 )
 
 var imeRefreshChan = make(chan struct{}, 1)
@@ -167,8 +166,7 @@ func AsyncRefreshActiveWindowIME() {
 }
 
 func startIMEMonitorLoop() {
-	strPtr, _ := syscall.UTF16PtrFromString("Control Panel\\Input Method")
-	strVal := uintptr(unsafe.Pointer(strPtr))
+	strVal := uintptr(unsafe.Pointer(imeSettingChangeStr))
 
 	for range imeRefreshChan {
 		time.Sleep(300 * time.Millisecond)
