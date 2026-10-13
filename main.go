@@ -266,7 +266,6 @@ func (b *SwitchBrain) StartHotkeyListener() {
 	RegisterHotKey(hwnd, HotkeyToggleMode, 0x0004|0x0002, 0x59)
 	RegisterHotKey(hwnd, HotkeyToggleHide, 0x0004|0x0002|0x0008, 0x59)
 
-	// 启动原生 Win32 1.5s 探针（无额外 Go 协程开销）
 	SetTimer(hwnd, TimerDpiProbeID, 1500)
 
 	var msg Msg
