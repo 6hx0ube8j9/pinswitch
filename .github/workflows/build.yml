@@ -31,6 +31,7 @@ jobs:
         run: |
           go install github.com/tc-hib/go-winres@v0.3.3
           go-winres make --arch ${{ matrix.goarch }}
+          Get-ChildItem -Path . -Filter "*.syso" | Select-Object Name, Length
 
       - name: Build EXE
         shell: pwsh
