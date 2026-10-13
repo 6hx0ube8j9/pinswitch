@@ -22,6 +22,9 @@ const (
 	RegPathApp     = `Software\Pinswitch`
 	RegValHideTray = "HideTrayIcon"
 
+	IMEModeFull   uint32 = 0
+	IMEModeDouble uint32 = 1
+
 	HotkeyToggleMode = 1
 	HotkeyToggleHide = 2
 
@@ -94,8 +97,12 @@ func (b *SwitchBrain) ToggleMode() {
 	b.lastToggle = time.Now()
 	b.toggleMu.Unlock()
 
-	current := b.GetIMEMode()
-	if b.SetIMEMode(1 - current) {
+	targetMode := IMEModeDouble
+	if b.GetIMEMode() == IMEModeDouble {
+		targetMode = IMEModeFull
+	}
+
+	if b.SetIMEMode(targetMode) {
 		AsyncRefreshActiveWindowIME()
 	}
 }
@@ -263,8 +270,8 @@ func (b *SwitchBrain) StartHotkeyListener() {
 		b.OnReady()
 	}
 
-	RegisterHotKey(hwnd, HotkeyToggleMode, 0x0004|0x0002, 0x59)
-	RegisterHotKey(hwnd, HotkeyToggleHide, 0x0004|0x0002|0x0008, 0x59)
+	RegisterHotKey(hwnd, HotkeyToggleMode, MOD_CONTROL|MOD_SHIFT, 'Y')
+	RegisterHotKey(hwnd, HotkeyToggleHide, MOD_CONTROL|MOD_SHIFT|MOD_WIN, 'Y')
 
 	SetTimer(hwnd, TimerDpiProbeID, 1500)
 
@@ -337,7 +344,7 @@ func main() {
 	if err == syscall.ERROR_ALREADY_EXISTS || ret == 0 {
 		oldHwnd := FindWindow("PinswitchHotkeyWindow_Unique_Class")
 		if oldHwnd != 0 {
-			if GetAsyncKeyState(0x10) {
+			if GetAsyncKeyState(VK_SHIFT) {
 				PostMessage(oldHwnd, WM_USER_TOGGLE_HIDE, 0, 0)
 			} else {
 				PostMessage(oldHwnd, WM_USER_TOGGLE_MODE, 0, 0)
