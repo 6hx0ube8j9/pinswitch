@@ -82,8 +82,11 @@ func (b *SwitchBrain) SetIMEMode(mode uint32) bool {
 	defer k.Close()
 
 	err = k.SetDWordValue(RegValInput, mode)
-	if err == nil && b.OnModeChanged != nil {
-		b.OnModeChanged()
+	if err == nil {
+		if b.OnModeChanged != nil {
+			b.OnModeChanged()
+		}
+		AsyncRefreshActiveWindowIME()
 	}
 	return err == nil
 }
@@ -102,9 +105,7 @@ func (b *SwitchBrain) ToggleMode() {
 		targetMode = IMEModeFull
 	}
 
-	if b.SetIMEMode(targetMode) {
-		AsyncRefreshActiveWindowIME()
-	}
+	b.SetIMEMode(targetMode)
 }
 
 func (b *SwitchBrain) IsAutoStart() bool {
