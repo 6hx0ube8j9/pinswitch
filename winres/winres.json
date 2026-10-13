@@ -1,12 +1,18 @@
 {
   "RT_GROUP_ICON": {
     "APP": {
-      "0409": "../icons/app.ico"
+      "0000": "icons/app.ico"
+    },
+    "ICON_QUAN": {
+      "0000": "icons/quan.ico"
+    },
+    "ICON_SHUANG": {
+      "0000": "icons/shuang.ico"
     }
   },
   "RT_MANIFEST": {
     "#1": {
-      "0409": "../main.manifest"
+      "0409": "app.manifest"
     }
   },
   "RT_VERSION": {
