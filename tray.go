@@ -167,7 +167,7 @@ func (t *TrayUI) getNotifyData() NotifyIconData {
 	tip := "Pinswitch: 全拼模式"
 	nid.HIcon = t.hIconQuan
 
-	if mode == 1 {
+	if mode == IMEModeDouble {
 		tip = "Pinswitch: 双拼模式"
 		nid.HIcon = t.hIconShuang
 	}
@@ -190,7 +190,7 @@ func (t *TrayUI) ShowMenu() {
 	mode := t.brain.GetIMEMode()
 	quanFlag := uint32(MF_STRING)
 	shuangFlag := uint32(MF_STRING)
-	if mode == 0 {
+	if mode == IMEModeDouble {
 		quanFlag |= MF_CHECKED
 	} else {
 		shuangFlag |= MF_CHECKED
@@ -227,7 +227,7 @@ func (t *TrayUI) HandleMenuClick(cmdID int) {
 			"Shift+Ctrl+Y：切换全拼/双拼\n" +
 			"Shift+Ctrl+Win+Y：显示/隐藏托盘图标\n" +
 			"Shift+双击程序：显示/隐藏托盘图标"
-		MessageBox(t.brain.hwnd, helpText, "Pinswitch", 0x00000040)
+		MessageBox(t.brain.hwnd, helpText, "Pinswitch", MB_OK|MB_ICONINFORMATION)
 	case MenuIDExit:
 		PostMessage(t.brain.hwnd, WM_CLOSE, 0, 0)
 	}
