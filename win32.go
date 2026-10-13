@@ -12,12 +12,11 @@ import (
 
 const (
 	WM_NULL           = 0x0000
-	WM_DESTROY        = 0x0002
 	WM_CLOSE          = 0x0010
 	WM_SETTINGCHANGE  = 0x001A
-	WM_TIMER          = 0x0113
-	WM_COMMAND        = 0x0111
 	WM_DISPLAYCHANGE  = 0x007E
+	WM_COMMAND        = 0x0111
+	WM_TIMER          = 0x0113
 	WM_POWERBROADCAST = 0x0218
 	WM_HOTKEY         = 0x0312
 	WM_USER           = 0x0400
@@ -113,7 +112,6 @@ var (
 	procCreateWindowEx         = user32.NewProc("CreateWindowExW")
 	procDestroyWindow          = user32.NewProc("DestroyWindow")
 	procPostQuitMessage        = user32.NewProc("PostQuitMessage")
-	procFindWindowExW          = user32.NewProc("FindWindowExW")
 	procFindWindowW            = user32.NewProc("FindWindowW")
 	procPostMessageW           = user32.NewProc("PostMessageW")
 	procGetAsyncKeyState         = user32.NewProc("GetAsyncKeyState")
@@ -140,7 +138,6 @@ var (
 
 	procGetModuleHandleW = kernel32.NewProc("GetModuleHandleW")
 	procCreateMutexW     = kernel32.NewProc("CreateMutexW")
-	procCloseHandle      = kernel32.NewProc("CloseHandle")
 
 	globalWndProcCallback uintptr
 	trayClassName         = syscall.StringToUTF16Ptr("Shell_TrayWnd")
@@ -255,10 +252,6 @@ func CreateMutex(name string) (uintptr, error) {
 	return ret, nil
 }
 
-func CloseHandle(handle syscall.Handle) {
-	procCloseHandle.Call(uintptr(handle))
-}
-
 func RegisterHotKey(hwnd uintptr, id int, fsModifiers, vk uint32) bool {
 	ret, _, _ := procRegisterHotKey.Call(hwnd, uintptr(id), uintptr(fsModifiers), uintptr(vk))
 	return ret != 0
@@ -333,7 +326,7 @@ func GetAsyncKeyState(vKey int) bool {
 
 func FindWindow(className string) uintptr {
 	classNamePtr, _ := syscall.UTF16PtrFromString(className)
-	ret, _, _ := procFindWindowExW.Call(0, 0, uintptr(unsafe.Pointer(classNamePtr)), 0)
+	ret, _, _ := procFindWindowW.Call(uintptr(unsafe.Pointer(classNamePtr)), 0)
 	return ret
 }
 
