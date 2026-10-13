@@ -11,6 +11,11 @@ permissions:
 jobs:
   build:
     runs-on: windows-2022
+    strategy:
+      matrix:
+        goarch:
+          - 386
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,34 +26,26 @@ jobs:
           go-version: '1.20'
           cache: true
 
-      - name: Verify Dependencies
-        shell: pwsh
-        run: |
-          go mod download
-
       - name: Generate Windows Resources
         shell: pwsh
         run: |
-          if (!(Test-Path "icons/app.ico")) {
-            Write-Error "File icons/app.ico not found. Please check the path!"
-            exit 1
-          }
           go install github.com/tc-hib/go-winres@v0.3.3
-          go-winres make --arch 386
+          go-winres make --arch ${{ matrix.goarch }}
 
       - name: Build EXE
         shell: pwsh
         env:
-          CGO_ENABLED: "0"
-          GOOS: "windows"
-          GOARCH: "386"
+          CGO_ENABLED: '0'
+          GOOS: 'windows'
+          GOARCH: ${{ matrix.goarch }}
         run: |
-          go build -mod=readonly -ldflags="-s -w -H=windowsgui" -o pinswitch.exe .
+          New-Item -ItemType Directory -Force -Path "release"
+          go build -mod=readonly -ldflags="-s -w -H=windowsgui" -o "release/pinswitch.exe" .
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pinswitch-windows-386
-          path: pinswitch.exe
+          name: pinswitch-windows-${{ matrix.goarch }}
+          path: release/pinswitch.exe
           if-no-files-found: error
           retention-days: 14
