@@ -28,6 +28,8 @@ const (
 	WM_USER_TOGGLE_MODE = WM_USER + 777
 	WM_USER_TOGGLE_HIDE = WM_USER + 778
 	WM_USER_SYNC_UI     = WM_USER + 779
+
+	TimerDpiProbeID = 1
 )
 
 type SwitchBrain struct {
@@ -41,6 +43,7 @@ type SwitchBrain struct {
 	OnTrayEvent     func(lparam int)
 	OnMenuCommand   func(cmdID int)
 	OnModeChanged   func()
+	OnDpiCheck      func()
 	OnRestoreSystem func()
 	OnBeforeClose   func()
 }
@@ -68,13 +71,13 @@ func (b *SwitchBrain) SetIMEMode(mode uint32) bool {
 	if b.GetIMEMode() == mode {
 		return false
 	}
-	
+
 	k, _, err := registry.CreateKey(registry.CURRENT_USER, RegPathInput, registry.SET_VALUE)
 	if err != nil {
 		return false
 	}
 	defer k.Close()
-	
+
 	err = k.SetDWordValue(RegValInput, mode)
 	if err == nil && b.OnModeChanged != nil {
 		b.OnModeChanged()
@@ -189,12 +192,24 @@ func (b *SwitchBrain) StartHotkeyListener() {
 			}
 			return 1
 
-        case WM_USER_SYNC_UI:
-            if b.OnModeChanged != nil {
-                b.OnModeChanged()
-            }
-            return 0
-			
+		case WM_TIMER:
+			if wparam == TimerDpiProbeID && b.OnDpiCheck != nil {
+				b.OnDpiCheck()
+			}
+			return 0
+
+		case WM_DISPLAYCHANGE, WM_SETTINGCHANGE:
+			if b.OnDpiCheck != nil {
+				b.OnDpiCheck()
+			}
+			return 0
+
+		case WM_USER_SYNC_UI:
+			if b.OnModeChanged != nil {
+				b.OnModeChanged()
+			}
+			return 0
+
 		case WM_HOTKEY:
 			switch int(wparam) {
 			case HotkeyToggleMode:
@@ -223,8 +238,9 @@ func (b *SwitchBrain) StartHotkeyListener() {
 		case WM_USER_TOGGLE_HIDE:
 			b.ToggleHide()
 			return 0
-			
-        case WM_CLOSE:
+
+		case WM_CLOSE:
+			KillTimer(hwnd, TimerDpiProbeID)
 			if b.OnBeforeClose != nil {
 				b.OnBeforeClose()
 			}
@@ -249,6 +265,9 @@ func (b *SwitchBrain) StartHotkeyListener() {
 
 	RegisterHotKey(hwnd, HotkeyToggleMode, 0x0004|0x0002, 0x59)
 	RegisterHotKey(hwnd, HotkeyToggleHide, 0x0004|0x0002|0x0008, 0x59)
+
+	// 启动原生 Win32 1.5s 探针（无额外 Go 协程开销）
+	SetTimer(hwnd, TimerDpiProbeID, 1500)
 
 	var msg Msg
 	for {
@@ -364,16 +383,18 @@ func main() {
 	brain.OnModeChanged = func() {
 		tray.SyncUI(NIM_MODIFY)
 	}
+	brain.OnDpiCheck = func() {
+		tray.CheckDpiAndRefresh()
+	}
 	brain.OnRestoreSystem = func() {
 		if !brain.IsTrayHidden() {
 			tray.Show()
 		}
 	}
-
-	brain.OnBeforeClose = func() {		
+	brain.OnBeforeClose = func() {
 		tray.Close()
-	}	
-	
+	}
+
 	exitChan := make(chan struct{})
 	go func() {
 		brain.StartHotkeyListener()
@@ -385,8 +406,8 @@ func main() {
 
 	go brain.WatchRegistry(ctx, func() {
 		if brain.hwnd != 0 {
-		PostMessage(brain.hwnd, WM_USER_SYNC_UI, 0, 0)
-		}	
+			PostMessage(brain.hwnd, WM_USER_SYNC_UI, 0, 0)
+		}
 	})
 
 	<-exitChan
