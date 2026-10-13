@@ -88,14 +88,13 @@ func (t *TrayUI) CheckDpiAndRefresh() {
 	targetSize := GetTaskbarSmallIconSize()
 	if targetSize != t.currentSize {
 		t.reloadIcons(targetSize)
-		t.SyncUI(NIM_MODIFY)
+		t.shellNotify(NIM_MODIFY)
 	}
 }
 
 func (t *TrayUI) Close() {
 	if t.isVisible {
-		nid := t.getNotifyData()
-		ShellNotifyIcon(NIM_DELETE, &nid)
+		t.shellNotify(NIM_DELETE)
 		t.isVisible = false
 	}
 	if t.hIconQuan != 0 {
@@ -110,7 +109,7 @@ func (t *TrayUI) Close() {
 
 func (t *TrayUI) Show() {
 	t.isVisible = true
-	t.SyncUI(NIM_ADD)
+	t.shellNotify(NIM_ADD)
 }
 
 func (t *TrayUI) Hide() {
@@ -118,27 +117,36 @@ func (t *TrayUI) Hide() {
 		return
 	}
 	t.isVisible = false
-	nid := t.getNotifyData()
-	ShellNotifyIcon(NIM_DELETE, &nid)
+	t.shellNotify(NIM_DELETE)
 }
 
-func (t *TrayUI) SyncUI(action uint32) {
+func (t *TrayUI) SyncUI() {
 	if !t.isVisible {
 		return
 	}
+	t.shellNotify(NIM_MODIFY)
+}
+
+func (t *TrayUI) shellNotify(action uint32) bool {
 	nid := t.getNotifyData()
 
-	if !ShellNotifyIcon(action, &nid) {
-		if action == NIM_ADD && t.useGUID {
-			t.useGUID = false
-			nid = t.getNotifyData()
-			ShellNotifyIcon(NIM_ADD, &nid)
-			return
-		}
-		if action == NIM_MODIFY {
-			ShellNotifyIcon(NIM_ADD, &nid)
+	if ShellNotifyIcon(action, &nid) {
+		return true
+	}
+
+	if t.useGUID {
+		t.useGUID = false
+		nid = t.getNotifyData()
+		if ShellNotifyIcon(action, &nid) {
+			return true
 		}
 	}
+
+	if action == NIM_MODIFY {
+		return ShellNotifyIcon(NIM_ADD, &nid)
+	}
+
+	return false
 }
 
 func (t *TrayUI) getNotifyData() NotifyIconData {
