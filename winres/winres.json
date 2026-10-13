@@ -3,10 +3,10 @@
     "APP": {
       "0000": "icons/app.ico"
     },
-    "ICON_QUAN": {
+    "101": {
       "0000": "icons/quan.ico"
     },
-    "ICON_SHUANG": {
+    "102": {
       "0000": "icons/shuang.ico"
     }
   },
