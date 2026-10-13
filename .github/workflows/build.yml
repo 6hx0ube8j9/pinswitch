@@ -5,12 +5,12 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+permissions:
+  contents: read
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,12 +19,12 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.20'
-          cache: false
+          cache: true
 
-      - name: Install dependencies
+      - name: Verify Dependencies
         shell: pwsh
         run: |
-          go mod tidy
+          go mod download
 
       - name: Generate Windows Resources
         shell: pwsh
@@ -33,7 +33,8 @@ jobs:
             Write-Error "File icons/app.ico not found. Please check the path!"
             exit 1
           }
-          go run github.com/tc-hib/go-winres@latest make --arch 386
+          go install github.com/tc-hib/go-winres@v0.3.3
+          go-winres make --arch 386
 
       - name: Build EXE
         shell: pwsh
@@ -42,10 +43,12 @@ jobs:
           GOOS: "windows"
           GOARCH: "386"
         run: |
-          go build -ldflags="-s -w -H=windowsgui" -o pinswitch.exe .
+          go build -mod=readonly -ldflags="-s -w -H=windowsgui" -o pinswitch.exe .
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pinswitch
+          name: pinswitch-windows-386
           path: pinswitch.exe
+          if-no-files-found: error
+          retention-days: 14
