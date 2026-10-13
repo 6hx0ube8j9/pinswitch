@@ -134,10 +134,10 @@ func (t *TrayUI) shellNotify(action uint32) bool {
 		return true
 	}
 
-	if t.useGUID {
+	if action == NIM_ADD && t.useGUID {
 		t.useGUID = false
 		nid = t.getNotifyData()
-		if ShellNotifyIcon(action, &nid) {
+		if ShellNotifyIcon(NIM_ADD, &nid) {
 			return true
 		}
 	}
@@ -190,10 +190,11 @@ func (t *TrayUI) ShowMenu() {
 	mode := t.brain.GetIMEMode()
 	quanFlag := uint32(MF_STRING)
 	shuangFlag := uint32(MF_STRING)
+
 	if mode == IMEModeDouble {
-		quanFlag |= MF_CHECKED
-	} else {
 		shuangFlag |= MF_CHECKED
+	} else {
+		quanFlag |= MF_CHECKED
 	}
 
 	autoFlag := uint32(MF_STRING)
@@ -217,9 +218,9 @@ func (t *TrayUI) ShowMenu() {
 func (t *TrayUI) HandleMenuClick(cmdID int) {
 	switch cmdID {
 	case MenuIDFullPinyin:
-		t.brain.SetIMEMode(0)
+		t.brain.SetIMEMode(IMEModeFull)
 	case MenuIDDoublePinyin:
-		t.brain.SetIMEMode(1)
+		t.brain.SetIMEMode(IMEModeDouble)
 	case MenuIDAutoStart:
 		t.brain.ToggleAutoStart()
 	case MenuIDHelp:
