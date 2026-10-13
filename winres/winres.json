@@ -1,12 +1,12 @@
 {
   "RT_GROUP_ICON": {
-    "1": {
+    "#1": {
       "0000": "icons/app.ico"
     },
-    "101": {
+    "#101": {
       "0000": "icons/quan.ico"
     },
-    "102": {
+    "#102": {
       "0000": "icons/shuang.ico"
     }
   },
