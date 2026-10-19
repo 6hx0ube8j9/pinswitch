@@ -5,8 +5,6 @@ package main
 import (
 	"syscall"
 	"unsafe"
-
-	"golang.org/x/sys/windows"
 )
 
 const (
@@ -20,26 +18,17 @@ const (
 	MenuIDExit         = 1005
 )
 
-var pinswitchTrayGUID = windows.GUID{
-	Data1: 0x5b3c4d2e,
-	Data2: 0x1a2b,
-	Data3: 0x3c4d,
-	Data4: [8]byte{0x5e, 0x6f, 0x7a, 0x8b, 0x9c, 0x0d, 0x1e, 0x2f},
-}
-
 type TrayUI struct {
 	brain       *SwitchBrain
 	currentSize int
 	hIconQuan   uintptr
 	hIconShuang uintptr
 	isVisible   bool
-	useGUID     bool
 }
 
 func NewTrayUI(brain *SwitchBrain) *TrayUI {
 	t := &TrayUI{
-		brain:   brain,
-		useGUID: true,
+		brain: brain,
 	}
 	t.reloadIcons(GetTaskbarSmallIconSize())
 	return t
@@ -134,14 +123,6 @@ func (t *TrayUI) shellNotify(action uint32) bool {
 		return true
 	}
 
-	if action == NIM_ADD && t.useGUID {
-		t.useGUID = false
-		nid = t.getNotifyData()
-		if ShellNotifyIcon(NIM_ADD, &nid) {
-			return true
-		}
-	}
-
 	if action == NIM_MODIFY {
 		return ShellNotifyIcon(NIM_ADD, &nid)
 	}
@@ -156,11 +137,6 @@ func (t *TrayUI) getNotifyData() NotifyIconData {
 		UID:              1,
 		UFlags:           NIF_MESSAGE | NIF_ICON | NIF_TIP,
 		UCallbackMessage: WM_TRAYICON,
-	}
-
-	if t.useGUID {
-		nid.UFlags |= NIF_GUID
-		nid.GuidItem = pinswitchTrayGUID
 	}
 
 	mode := t.brain.GetIMEMode()
